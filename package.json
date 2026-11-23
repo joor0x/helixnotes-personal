@@ -24,7 +24,11 @@
     "verify": "pnpm check && pnpm test && pnpm test:updater-packaging && pnpm test:mcp && pnpm test:rust && pnpm test:mcp:native && pnpm lint:rust && pnpm build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "fork:dev": "HELIXNOTES_INSTALL_TYPE=fork tauri dev",
+    "fork:build:linux": "HELIXNOTES_INSTALL_TYPE=fork tauri build --config src-tauri/tauri.fork.conf.json --bundles deb,appimage",
+    "fork:dev:android": "tauri android dev --config src-tauri/tauri.fork.conf.json",
+    "fork:build:android": "tauri android build --apk --target aarch64 --config src-tauri/tauri.fork.conf.json"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",

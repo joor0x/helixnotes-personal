@@ -1,0 +1,165 @@
+# Building and running HelixNotes Personal
+
+How to run this fork locally and produce packages for Linux and Android.
+Commands assume Ubuntu/Debian; adapt package names for other distros.
+
+## Why fork builds differ from upstream
+
+Two upstream settings would interfere with a personal build:
+
+- **In-app updater.** `src-tauri/tauri.conf.json` points the updater at
+  `helixnotes.com`. A fork build that checks it would offer the upstream release
+  and overwrite the fork's changes. The `fork:*` scripts build with
+  `HELIXNOTES_INSTALL_TYPE=fork`, which makes the app treat itself as a managed
+  install: no update check, no update UI.
+- **Updater signing.** `bundle.createUpdaterArtifacts` requires upstream's
+  private signing key (`TAURI_SIGNING_PRIVATE_KEY`), so `tauri build` fails
+  without it. `src-tauri/tauri.fork.conf.json` turns it off and is merged in via
+  `--config`.
+
+Use the `fork:*` scripts below instead of plain `pnpm tauri build`.
+
+## Common prerequisites
+
+| Tool | Version | Notes |
+|---|---|---|
+| Rust | 1.88+ | via [rustup](https://rustup.rs/) |
+| Node.js | 22 LTS+ | |
+| pnpm | 11.x | `corepack enable` picks the version pinned in `package.json` |
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+corepack enable
+pnpm install
+```
+
+## Linux
+
+### System dependencies
+
+```bash
+sudo apt install build-essential curl wget file pkg-config \
+  libwebkit2gtk-4.1-dev libssl-dev libxdo-dev \
+  libayatana-appindicator3-dev librsvg2-dev
+```
+
+See [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for other distros.
+
+### Run in development
+
+```bash
+pnpm fork:dev
+```
+
+Starts Vite on `http://localhost:5173` and opens the app with hot reload.
+
+### Build packages
+
+```bash
+pnpm fork:build:linux
+```
+
+Outputs:
+
+- `src-tauri/target/release/bundle/deb/HelixNotes_<version>_amd64.deb`
+- `src-tauri/target/release/bundle/appimage/HelixNotes_<version>_amd64.AppImage`
+
+Building the AppImage downloads `linuxdeploy` on first run, so it needs network access.
+Install the `.deb` with `sudo apt install ./HelixNotes_<version>_amd64.deb`.
+
+Alternative: `nix build` uses `flake.nix`, which also disables the updater.
+
+## Android
+
+The Android project is already generated and tracked in `src-tauri/gen/android`;
+do **not** run `tauri android init`, it would overwrite local changes.
+
+### Toolchain
+
+- **JDK 17 or 21.** Gradle 8.14 does not run on JDK 25, so point `JAVA_HOME` at 21
+  even if a newer JDK is the system default.
+- **Android SDK** with platform `android-36` and build tools (Android Studio or `sdkmanager`).
+- **Android NDK** (27.x tested with Tauri 2).
+- **Rust Android targets.**
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export ANDROID_HOME="$HOME/Android/Sdk"
+export NDK_HOME="$ANDROID_HOME/ndk/27.0.12077973"
+export PATH="$ANDROID_HOME/platform-tools:$PATH"
+
+rustup target add aarch64-linux-android armv7-linux-androideabi \
+  i686-linux-android x86_64-linux-android
+```
+
+Put the exports in your shell profile so every session has them.
+
+### Run on a device or emulator
+
+Enable USB debugging on the phone, connect it (check with `adb devices`), then:
+
+```bash
+pnpm fork:dev:android
+```
+
+### Build an APK
+
+```bash
+pnpm fork:build:android
+```
+
+This builds an `arm64-v8a` APK (almost every current phone). Drop `--target aarch64`
+from the script to build a universal APK for all ABIs.
+
+Output: `src-tauri/gen/android/app/build/outputs/apk/universal/release/`.
+Without a signing key the file is `app-universal-release-unsigned.apk` and Android
+will refuse to install it; configure signing first.
+
+### Release signing
+
+Create a keystore once and keep it **outside the repo** and backed up. Losing it means
+future APKs cannot update the installed app.
+
+```bash
+keytool -genkey -v -keystore ~/keys/helixnotes-personal.jks \
+  -keyalg RSA -keysize 4096 -validity 10000 -alias helixnotes
+```
+
+Create `src-tauri/gen/android/keystore.properties` (git-ignored):
+
+```properties
+storeFile=/home/<user>/keys/helixnotes-personal.jks
+storePassword=<password>
+keyAlias=helixnotes
+keyPassword=<password>
+```
+
+`app/build.gradle.kts` picks it up automatically and the release APK comes out signed
+(`app-universal-release.apk`). Install it with:
+
+```bash
+adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+```
+
+### Coexisting with the upstream app
+
+The fork keeps upstream's application ID, `com.helixnotes.app`. On Android, that means:
+
+- It cannot be installed next to the official HelixNotes APK.
+- Installing over the official app fails with a signature mismatch; uninstall it first
+  (this deletes its app-private data, though vaults in shared storage stay).
+
+## Checks before building
+
+```bash
+pnpm verify
+```
+
+Runs the frontend checks, JS/MCP/Rust tests, Rust lints and a production frontend build.
+
+## Troubleshooting
+
+- **`Unsupported class file major version 69`** or a Gradle crash at startup: Gradle is running on JDK 25. Set `JAVA_HOME` to JDK 21.
+- **`NDK_HOME` / `ANDROID_HOME` not set**: export them as shown above.
+- **`A public key has been found, but no private key`**: you ran plain `tauri build`; use `pnpm fork:build:linux`.
+- **`webkit2gtk-4.1` not found**: install `libwebkit2gtk-4.1-dev`.

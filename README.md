@@ -1,9 +1,21 @@
-# HelixNotes
+# HelixNotes Personal
+
+Personal fork of [HelixNotes](https://gitlab.com/ArkHost/HelixNotes),
+originally developed by Yuri Karamian / ArkHost.
+
+This fork adds features for my personal workflow.
+Distributed under the original AGPL-3.0 license.
+
+## Changes
+
+Features and implementation progress are tracked in GitHub Issues.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://gitlab.com/ArkHost/HelixNotes/-/blob/main/LICENSE)
 [![Latest Release](https://img.shields.io/badge/release-v1.3.8-green)](https://gitlab.com/ArkHost/HelixNotes/-/releases/v1.3.8)
 [![Website](https://img.shields.io/badge/web-helixnotes.com-purple)](https://helixnotes.com)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS%20%7C%20Android-lightgrey)]()
+
+
 
 A local markdown note-taking app built with Tauri, SvelteKit, and Rust.
 
@@ -211,6 +223,9 @@ See the [translation guide and example file](docs/translations/README.md) for pl
 - **Platforms**: Linux (AppImage), Windows, macOS, Android
 
 ## Building from Source
+
+> **Fork builds:** see [docs/fork-build.md](docs/fork-build.md) for the `pnpm fork:*`
+> scripts, Linux packages and Android APK signing. They disable the upstream updater.
 
 ### Prerequisites
 
