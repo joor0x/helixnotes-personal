@@ -2,6 +2,8 @@
 	import { t as ui, label as uiLabel, tr as uiText, locale, setUiText, setUiLabel } from '$lib/i18n';
 	import AiImageOptions from './AiImageOptions.svelte';
 	import { isCliProvider } from '$lib/ai-cli';
+	import { LanguageTool } from '$lib/editor/languagetool';
+	import { languageToolCheck } from '$lib/api';
 	import { aiImageCandidates, protectAiMedia, restoreAiMedia, type AiImageCandidate } from '$lib/utils/ai-media';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { get } from 'svelte/store';
@@ -770,6 +772,13 @@
 	let imageTitleModal = $state<{ title: string } | null>(null);
 	let imageViewer = $state<{ src: string; alt: string } | null>(null);
 	let copyToast = $state<'copying' | 'done' | null>(null);
+	let languageToolError = $state<string | null>(null);
+	let languageToolErrorTimer: ReturnType<typeof setTimeout> | null = null;
+	function showLanguageToolError(message: string) {
+		languageToolError = message.replace(/^Error:\s*/, '');
+		if (languageToolErrorTimer) clearTimeout(languageToolErrorTimer);
+		languageToolErrorTimer = setTimeout(() => { languageToolError = null; }, 6000);
+	}
 
 	// Math insert/edit modal (opened by /math slash command or double-click on existing math node)
 	let mathModal = $state<{ kind: 'block' | 'inline'; editPos: number | null; tex: string } | null>(null);
@@ -5740,6 +5749,11 @@
 					ColorSwatch,
 				TaskMetaDim,
 				...($appConfig?.enable_wiki_links ? [WikiLink, WikiLinkAutocomplete] : []),
+				...($appConfig?.languagetool_enabled ? [LanguageTool.configure({
+					check: languageToolCheck,
+					labels: { ignore: uiText('languagetool.ignore'), noSuggestions: uiText('languagetool.noSuggestions') },
+					onError: showLanguageToolError,
+				})] : []),
 			],
 			content: html,
 			editorProps: {
@@ -9051,6 +9065,10 @@
 	</div>
 {/if}
 
+{#if languageToolError}
+	<div class="copy-toast lt-error-toast" role="status">{$ui('languagetool.error', { error: languageToolError })}</div>
+{/if}
+
 {#if copyToast}
 	<div class="copy-toast" class:done={copyToast === 'done'}>
 		{#if copyToast === 'copying'}
@@ -12087,6 +12105,11 @@
 		color: white;
 		z-index: 9999;
 		animation: toast-in 0.15s ease-out;
+	}
+
+	.lt-error-toast {
+		background: var(--danger);
+		max-width: min(420px, calc(100vw - 48px));
 	}
 
 	.copy-toast.done {

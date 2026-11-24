@@ -1221,5 +1221,22 @@
   "ai.cliPath": "Ruta de la CLI",
   "ai.cliPathPlaceholder": "Detección automática ({binary})",
   "ai.cliPathHint": "Déjalo vacío para buscar `{binary}` en el PATH y en las carpetas de instalación habituales. Inicia sesión una vez en una terminal antes de usarla aquí.",
-  "ai.cliModelHint": "Déjalo vacío para usar el modelo por defecto de la CLI."
+  "ai.cliModelHint": "Déjalo vacío para usar el modelo por defecto de la CLI.",
+  "languagetool.title": "Gramática y ortografía",
+  "languagetool.enable": "Revisar con LanguageTool",
+  "languagetool.enableDesc": "Subraya errores de ortografía, gramática y estilo en el editor enriquecido. Haz clic en una palabra subrayada para ver sugerencias.",
+  "languagetool.privacyPublic": "El texto de la nota se envía a la API pública de LanguageTool (languagetool.org). El código no se envía. Usa tu propio servidor para que el texto no salga de tu red.",
+  "languagetool.privacyCustom": "El texto de la nota se envía a tu servidor de LanguageTool. El código no se envía.",
+  "languagetool.server": "URL del servidor",
+  "languagetool.serverHint": "Déjalo vacío para usar la API pública (limitada a unas 20 peticiones por minuto). Para un servidor local, p. ej. http://localhost:8081.",
+  "languagetool.language": "Idioma",
+  "languagetool.langAuto": "Automático (ES / CA / EN)",
+  "languagetool.langEs": "Español",
+  "languagetool.langCa": "Catalán",
+  "languagetool.langEnUs": "Inglés (EE. UU.)",
+  "languagetool.langEnGb": "Inglés (Reino Unido)",
+  "languagetool.scopeHint": "Los cambios se aplican a las notas que abras después. El modo código fuente no se revisa.",
+  "languagetool.ignore": "Ignorar",
+  "languagetool.noSuggestions": "Sin sugerencias",
+  "languagetool.error": "LanguageTool: {error}"
 }

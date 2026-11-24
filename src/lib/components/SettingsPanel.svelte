@@ -11,7 +11,7 @@
 	import AiModelPicker from './AiModelPicker.svelte';
 	import { AI_CLI_PROVIDERS, isCliProvider, cliProviderInfo } from '$lib/ai-cli';
 	import { showSettings, syncState, theme, resolvedTheme, appConfig, platformIsMobile, activeVaultConfig, updateAvailable as globalUpdateAvailable, updateObj as globalUpdateObj, installType, settingsTab, vaultReady, androidApkUrl, checkForUpdateMobile, notebookSortMode, isManagedInstall, customThemes } from '$lib/stores/app';
-	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setSyncSettings, testSyncConnection, syncNow, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments } from '$lib/api';
+	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setLanguageToolSettings, setSyncSettings, testSyncConnection, syncNow, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments } from '$lib/api';
 	import { darkThemes, isMobile, isAndroid } from '$lib/platform';
 	import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 	import { listen } from '@tauri-apps/api/event';
@@ -1001,6 +1001,28 @@
 	let showTrayIcon = $state($appConfig?.show_tray_icon ?? false);
 	let closeToTray = $state($appConfig?.close_to_tray ?? false);
 	let enableWikiLinks = $state($appConfig?.enable_wiki_links ?? true);
+	let languageToolEnabled = $state($appConfig?.languagetool_enabled ?? false);
+	let languageToolUrl = $state($appConfig?.languagetool_url ?? '');
+	let languageToolLanguage = $state($appConfig?.languagetool_language ?? 'auto');
+	let languageToolMessage = $state<string | null>(null);
+	const languageToolLanguages = [
+		{ id: 'auto', key: 'languagetool.langAuto' },
+		{ id: 'es', key: 'languagetool.langEs' },
+		{ id: 'ca-ES', key: 'languagetool.langCa' },
+		{ id: 'en-US', key: 'languagetool.langEnUs' },
+		{ id: 'en-GB', key: 'languagetool.langEnGb' },
+	] as const;
+
+	async function saveLanguageToolSettings() {
+		const enabled = languageToolEnabled, url = languageToolUrl.trim() || null, language = languageToolLanguage;
+		try {
+			await setLanguageToolSettings(enabled, url, language);
+			languageToolMessage = null;
+			appConfig.update(config => config ? { ...config, languagetool_enabled: enabled, languagetool_url: url, languagetool_language: language } : config);
+		} catch (error) {
+			languageToolMessage = String(error);
+		}
+	}
 
 	// Sidebar item visibility
 	let showAllNotes = $state($appConfig?.show_all_notes ?? true);
@@ -1746,6 +1768,42 @@
 										<span class="toggle-knob"></span>
 									</button>
 								</label>
+							</div>
+
+							<div class="settings-section">
+								<h3>{$ui("languagetool.title")}</h3>
+								<label class="setting-toggle">
+									<span class="setting-label">
+										<span class="setting-name">{$ui("languagetool.enable")}</span>
+										<span class="setting-desc">{$ui("languagetool.enableDesc")}</span>
+									</span>
+									<button class="toggle-switch" class:on={languageToolEnabled} role="switch" aria-checked={languageToolEnabled} aria-label={$ui("languagetool.enable")} onclick={() => { languageToolEnabled = !languageToolEnabled; void saveLanguageToolSettings(); }}>
+										<span class="toggle-knob"></span>
+									</button>
+								</label>
+								{#if languageToolEnabled}
+									<p class="setting-hint" style="color: var(--text-warning, #f59e0b); margin-top: 8px;">{languageToolUrl.trim() ? $ui("languagetool.privacyCustom") : $ui("languagetool.privacyPublic")}</p>
+									<h3 style="margin-top: 12px;">{$ui("languagetool.server")}</h3>
+									<input
+										type="text"
+										class="ai-key-input"
+										placeholder="https://api.languagetool.org"
+										value={languageToolUrl}
+										oninput={(e) => { languageToolUrl = (e.target as HTMLInputElement).value; }}
+										onblur={saveLanguageToolSettings}
+									/>
+									<p class="setting-hint">{$ui("languagetool.serverHint")}</p>
+									<h3 style="margin-top: 12px;">{$ui("languagetool.language")}</h3>
+									<div class="setting-options" style="flex-wrap: wrap;">
+										{#each languageToolLanguages as lang (lang.id)}
+											<button class="option-btn" class:active={languageToolLanguage === lang.id} onclick={() => { languageToolLanguage = lang.id; void saveLanguageToolSettings(); }}>{$ui(lang.key)}</button>
+										{/each}
+									</div>
+									<p class="setting-hint">{$ui("languagetool.scopeHint")}</p>
+								{/if}
+								{#if languageToolMessage}
+									<div class="import-result error"><span>{languageToolMessage}</span></div>
+								{/if}
 							</div>
 
 

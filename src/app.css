@@ -1584,3 +1584,49 @@ body.resizing {
     color: #1a1a2e !important;
   }
 }
+
+/* LanguageTool suggestions (src/lib/editor/languagetool.ts) */
+.lt-mark {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+  cursor: pointer;
+}
+.lt-spelling { text-decoration-color: var(--danger); }
+.lt-grammar { text-decoration-color: var(--warning); }
+.lt-style { text-decoration-color: var(--accent); }
+
+.lt-popover {
+  position: fixed;
+  z-index: 1700;
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.lt-popover .lt-message { margin: 0 0 8px; color: var(--text-secondary); }
+.lt-popover .lt-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lt-popover button {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.lt-popover button:hover { background: var(--bg-hover); }
+.lt-popover .lt-replacement { border-color: var(--accent); color: var(--text-accent); font-weight: 500; }
+.lt-popover .lt-ignore { margin-left: auto; color: var(--text-tertiary); }
+.lt-popover .lt-none { color: var(--text-tertiary); font-style: italic; }
+
+@media print {
+  .lt-mark { text-decoration: none; }
+}

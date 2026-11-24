@@ -300,6 +300,13 @@ pub struct AppConfig {
     #[serde(default)]
     pub ai_cli_models: std::collections::BTreeMap<String, String>,
     #[serde(default)]
+    pub languagetool_enabled: bool,
+    /// Server base URL; `None` uses the public LanguageTool API.
+    #[serde(default)]
+    pub languagetool_url: Option<String>,
+    #[serde(default = "default_languagetool_language")]
+    pub languagetool_language: String,
+    #[serde(default)]
     pub ai_writing_style: Option<String>,
     #[serde(default)]
     pub default_view_mode: bool,
@@ -375,6 +382,10 @@ fn default_max_versions() -> u32 {
     20
 }
 
+fn default_languagetool_language() -> String {
+    "auto".into()
+}
+
 fn default_ai_model() -> String {
     "claude-sonnet-5".to_string()
 }
@@ -445,6 +456,9 @@ impl Default for AppConfig {
             openai_compatible_model: None,
             ai_cli_paths: Default::default(),
             ai_cli_models: Default::default(),
+            languagetool_enabled: false,
+            languagetool_url: None,
+            languagetool_language: default_languagetool_language(),
             ai_writing_style: None,
             default_view_mode: false,
             new_notes_in_source_mode: false,

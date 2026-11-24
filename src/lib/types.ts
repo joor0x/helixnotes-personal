@@ -163,6 +163,9 @@ export interface AppConfig {
   openai_compatible_model?: string | null;
   ai_cli_paths?: Record<string, string>;
   ai_cli_models?: Record<string, string>;
+  languagetool_enabled?: boolean;
+  languagetool_url?: string | null;
+  languagetool_language?: string;
   ai_writing_style: string | null;
   default_view_mode: boolean;
   new_notes_in_source_mode: boolean;

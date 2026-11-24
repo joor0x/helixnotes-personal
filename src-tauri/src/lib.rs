@@ -5,6 +5,7 @@ mod commands;
 mod history;
 mod i18n;
 mod image_proxy;
+mod languagetool;
 #[cfg(desktop)]
 pub mod mcp;
 mod search;
@@ -272,6 +273,8 @@ pub fn run() {
             commands::test_ai_connection,
             commands::fetch_ai_models,
             commands::ai_ask,
+            languagetool::set_languagetool_settings,
+            languagetool::languagetool_check,
             commands::set_sync_settings,
             commands::test_sync_connection,
             commands::sync_now,

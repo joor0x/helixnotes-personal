@@ -637,6 +637,16 @@ export async function setAiSettings(
   });
 }
 
+// ── LanguageTool ──
+
+export async function setLanguageToolSettings(enabled: boolean, url: string | null, language: string): Promise<void> {
+  return invoke("set_languagetool_settings", { enabled, url, language });
+}
+
+export async function languageToolCheck(data: string): Promise<import('./editor/languagetool').LtMatch[]> {
+  return invoke("languagetool_check", { data });
+}
+
 export async function testAiConnection(): Promise<void> {
   return invoke("test_ai_connection");
 }

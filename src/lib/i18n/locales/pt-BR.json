@@ -1221,5 +1221,22 @@
   "ai.cliPath": "CLI path",
   "ai.cliPathPlaceholder": "Detected automatically ({binary})",
   "ai.cliPathHint": "Leave empty to find `{binary}` in PATH and common install folders. Sign in once in a terminal before using it here.",
-  "ai.cliModelHint": "Leave empty to use the CLI's default model."
+  "ai.cliModelHint": "Leave empty to use the CLI's default model.",
+  "languagetool.title": "Grammar and spelling",
+  "languagetool.enable": "Check with LanguageTool",
+  "languagetool.enableDesc": "Underline spelling, grammar and style issues in the rich editor. Click an underlined word for suggestions.",
+  "languagetool.privacyPublic": "Note text is sent to the public LanguageTool API (languagetool.org). Code is not sent. Use your own server to keep text on your network.",
+  "languagetool.privacyCustom": "Note text is sent to your LanguageTool server. Code is not sent.",
+  "languagetool.server": "Server URL",
+  "languagetool.serverHint": "Leave empty for the public API (limited to about 20 requests per minute). For a local server, e.g. http://localhost:8081.",
+  "languagetool.language": "Language",
+  "languagetool.langAuto": "Automatic (ES / CA / EN)",
+  "languagetool.langEs": "Spanish",
+  "languagetool.langCa": "Catalan",
+  "languagetool.langEnUs": "English (US)",
+  "languagetool.langEnGb": "English (UK)",
+  "languagetool.scopeHint": "Changes apply to notes opened afterwards. Source mode is not checked.",
+  "languagetool.ignore": "Ignore",
+  "languagetool.noSuggestions": "No suggestions",
+  "languagetool.error": "LanguageTool: {error}"
 }
