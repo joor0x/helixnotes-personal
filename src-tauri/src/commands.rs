@@ -1771,6 +1771,7 @@ pub(crate) fn parse_note_tasks(
         let content = &caps[2];
         let (due, due_time) = crate::reminders::parse_due(content);
         let remind = crate::reminders::parse_remind(content);
+        let repeat = crate::reminders::parse_repeat(content).map(|rule| rule.canonical());
         let mut tags = note_tags.to_vec();
         for tag in crate::reminders::inline_tags(content) {
             if !tags.iter().any(|t| t.eq_ignore_ascii_case(&tag)) {
@@ -1797,6 +1798,7 @@ pub(crate) fn parse_note_tasks(
             due,
             due_time,
             remind,
+            repeat,
             tags,
             priority,
         });
@@ -1954,7 +1956,41 @@ mod dot_named_vault_tests {
 
 #[cfg(test)]
 mod task_tests {
-    use super::scan_tasks;
+    use super::{apply_task_done, parse_note_tasks, scan_tasks};
+
+    #[test]
+    fn completing_a_recurring_task_opens_the_next_occurrence_above_it() {
+        let now =
+            chrono::NaiveDateTime::parse_from_str("2026-11-30T10:00", "%Y-%m-%dT%H:%M").unwrap();
+        let mut lines: Vec<String> = [
+            "- [ ] Review budget due:2026-11-30 remind:2026-11-30T09:00 repeat:weekly",
+            "  - [ ] Export bank CSV",
+            "- [ ] One-off",
+        ]
+        .map(String::from)
+        .to_vec();
+        assert!(apply_task_done(&mut lines, 0, true, now));
+        assert_eq!(
+            lines,
+            [
+                "- [ ] Review budget due:2026-12-07 remind:2026-12-07T09:00 repeat:weekly",
+                "- [x] Review budget due:2026-11-30 remind:2026-11-30T09:00 repeat:weekly",
+                "  - [ ] Export bank CSV",
+                "- [ ] One-off",
+            ]
+        );
+        // Unchecking never creates occurrences; completing a one-off task neither.
+        assert!(apply_task_done(&mut lines, 1, false, now));
+        assert!(apply_task_done(&mut lines, 3, true, now));
+        assert_eq!(lines.len(), 4);
+        assert!(!apply_task_done(&mut lines, 3, true, now));
+
+        let tasks = parse_note_tasks("/v/n.md", "N", &lines.join("\n"), &[]);
+        assert_eq!(tasks[0].repeat.as_deref(), Some("weekly"));
+        assert_eq!(tasks[0].text, "Review budget");
+        assert_eq!(tasks[0].remind.as_deref(), Some("2026-12-07T09:00"));
+        assert_eq!(tasks[3].repeat, None);
+    }
 
     #[test]
     fn targeted_task_scan_limits_results_and_keeps_task_metadata() {
@@ -2020,6 +2056,31 @@ fn toggle_checkbox_line(line: &str, done: bool) -> String {
     s
 }
 
+/// Check or uncheck the task at `idx`. Completing a recurring task also opens its next
+/// occurrence on the line above, so the completed line keeps its subtasks. False when the
+/// task was already in that state.
+fn apply_task_done(
+    lines: &mut Vec<String>,
+    idx: usize,
+    done: bool,
+    now: chrono::NaiveDateTime,
+) -> bool {
+    let toggled = toggle_checkbox_line(&lines[idx], done);
+    if toggled == lines[idx] {
+        return false;
+    }
+    let next = if done {
+        crate::reminders::next_occurrence_line(&lines[idx], now)
+    } else {
+        None
+    };
+    lines[idx] = toggled;
+    if let Some(next) = next {
+        lines.insert(idx, next);
+    }
+    true
+}
+
 #[tauri::command]
 pub async fn set_task_done(
     state: State<'_, AppState>,
@@ -2048,11 +2109,9 @@ pub async fn set_task_done(
             .ok_or("Task line not found (note changed)")?
     };
 
-    let toggled = toggle_checkbox_line(&lines[idx], done);
-    if toggled == lines[idx] {
+    if !apply_task_done(&mut lines, idx, done, chrono::Local::now().naive_local()) {
         return Ok(()); // already in the desired state
     }
-    lines[idx] = toggled;
     let mut new_body = lines.join("\n");
     if body.ends_with('\n') && !new_body.ends_with('\n') {
         new_body.push('\n');
@@ -2151,6 +2210,23 @@ pub async fn set_task_remind(
     let remind = crate::reminders::validate_remind(remind.as_deref())?;
     set_task_token(
         state, vault_path, note_path, line, raw_line, "remind", remind,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn set_task_repeat(
+    state: State<'_, AppState>,
+    vault_path: String,
+    note_path: String,
+    line: usize,
+    raw_line: String,
+    repeat: Option<String>,
+) -> Result<(), String> {
+    // daily, weekly, monthly, yearly, weekdays or <N><d|w|m|y>; None/empty clears it.
+    let repeat = crate::reminders::validate_repeat(repeat.as_deref())?;
+    set_task_token(
+        state, vault_path, note_path, line, raw_line, "repeat", repeat,
     )
     .await
 }

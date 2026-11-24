@@ -1280,5 +1280,18 @@
   "reminders.snooze10": "10 min",
   "reminders.snooze60": "1 hour",
   "reminders.snoozeTomorrow": "Tomorrow",
-  "settings.reminderNotificationsDescAndroid": "Notify at each task's remind: time, even when HelixNotes is closed. Reminders can be snoozed from the notification."
+  "settings.reminderNotificationsDescAndroid": "Notify at each task's remind: time, even when HelixNotes is closed. Reminders can be snoozed from the notification.",
+  "tasks.repeat": "Herhalen",
+  "tasks.repeatNone": "Herhaalt niet",
+  "tasks.repeat.daily": "Dagelijks",
+  "tasks.repeat.weekdays": "Werkdagen (ma–vr)",
+  "tasks.repeat.weekly": "Wekelijks",
+  "tasks.repeat.monthly": "Maandelijks",
+  "tasks.repeat.yearly": "Jaarlijks",
+  "tasks.repeat.everyDays": "{count, plural, one {Elke dag} other {Elke # dagen}}",
+  "tasks.repeat.everyWeeks": "{count, plural, one {Elke week} other {Elke # weken}}",
+  "tasks.repeat.everyMonths": "{count, plural, one {Elke maand} other {Elke # maanden}}",
+  "tasks.repeat.everyYears": "{count, plural, one {Elk jaar} other {Elke # jaar}}",
+  "tasks.repeatTitle": "Herhaalt: {rule}. Afvinken maakt de volgende aan.",
+  "editor.taskRepeat": "Herhalen"
 }

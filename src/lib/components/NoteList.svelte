@@ -54,7 +54,7 @@
 	import TagLabel from './TagLabel.svelte';
 	import { isMobile, isAndroid } from '$lib/platform';
 
-	let { onNoteSelected = (_path: string, _content: string, _task?: TaskItem) => {}, onNoteMoved = () => {}, onBeforeNoteSwitch = async () => true, onBeforeNoteDuplicate = async () => true, onBeforePathMutation = async () => null, onPathsMoved = async (_old: string, _next: string) => {}, onUpdateActiveNote, onTagsChanged, onRefreshTags, onNoteCreated = () => {}, onToggleTask = async (_t: TaskItem) => {}, onSetTaskPriority = async (_t: TaskItem, _p: string | null) => {}, onSetTaskDue = async (_t: TaskItem, _d: string | null) => {}, onSetTaskRemind = async (_t: TaskItem, _r: string | null) => {} }: {
+	let { onNoteSelected = (_path: string, _content: string, _task?: TaskItem) => {}, onNoteMoved = () => {}, onBeforeNoteSwitch = async () => true, onBeforeNoteDuplicate = async () => true, onBeforePathMutation = async () => null, onPathsMoved = async (_old: string, _next: string) => {}, onUpdateActiveNote, onTagsChanged, onRefreshTags, onNoteCreated = () => {}, onToggleTask = async (_t: TaskItem) => {}, onSetTaskPriority = async (_t: TaskItem, _p: string | null) => {}, onSetTaskDue = async (_t: TaskItem, _d: string | null) => {}, onSetTaskRemind = async (_t: TaskItem, _r: string | null) => {}, onSetTaskRepeat = async (_t: TaskItem, _r: string | null) => {} }: {
 		onNoteSelected?: (path: string, content: string, task?: TaskItem) => void;
 		onNoteMoved?: () => void;
 		onBeforeNoteSwitch?: () => Promise<boolean>;
@@ -69,6 +69,7 @@
 		onSetTaskPriority?: (t: TaskItem, p: string | null) => Promise<void>;
 		onSetTaskDue?: (t: TaskItem, d: string | null) => Promise<void>;
 		onSetTaskRemind?: (t: TaskItem, r: string | null) => Promise<void>;
+		onSetTaskRepeat?: (t: TaskItem, r: string | null) => Promise<void>;
 	} = $props();
 
 	const modKey = navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl';
@@ -1374,7 +1375,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="list-content" class:tasks-mode={$viewMode === 'tasks'} bind:this={listContainer} onscroll={onListScroll} ondblclick={handleListDoubleClick}>
 		{#if $viewMode === 'tasks'}
-			<TasksView onOpenTask={openTask} onToggleTask={onToggleTask} onSetTaskPriority={onSetTaskPriority} onSetTaskDue={onSetTaskDue} onSetTaskRemind={onSetTaskRemind} />
+			<TasksView onOpenTask={openTask} onToggleTask={onToggleTask} onSetTaskPriority={onSetTaskPriority} onSetTaskDue={onSetTaskDue} onSetTaskRemind={onSetTaskRemind} onSetTaskRepeat={onSetTaskRepeat} />
 		{/if}
 		{#if $viewMode === 'daily'}
 			<div class="cal">

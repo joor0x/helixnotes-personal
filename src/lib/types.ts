@@ -319,6 +319,8 @@ export interface TaskItem {
   due_time?: string | null;
   /** Local reminder, YYYY-MM-DDTHH:MM. */
   remind?: string | null;
+  /** Recurrence rule, canonical (`weekly`, `2d`, ...): completing opens the next occurrence. */
+  repeat?: string | null;
   /** Note tags plus #tags in the task line. */
   tags?: string[];
   priority: string | null;

@@ -1280,5 +1280,18 @@
   "reminders.snooze10": "10 min",
   "reminders.snooze60": "1 hour",
   "reminders.snoozeTomorrow": "Tomorrow",
-  "settings.reminderNotificationsDescAndroid": "Notify at each task's remind: time, even when HelixNotes is closed. Reminders can be snoozed from the notification."
+  "settings.reminderNotificationsDescAndroid": "Notify at each task's remind: time, even when HelixNotes is closed. Reminders can be snoozed from the notification.",
+  "tasks.repeat": "Répéter",
+  "tasks.repeatNone": "Ne se répète pas",
+  "tasks.repeat.daily": "Tous les jours",
+  "tasks.repeat.weekdays": "Jours ouvrés (lun–ven)",
+  "tasks.repeat.weekly": "Toutes les semaines",
+  "tasks.repeat.monthly": "Tous les mois",
+  "tasks.repeat.yearly": "Tous les ans",
+  "tasks.repeat.everyDays": "{count, plural, one {Tous les jours} other {Tous les # jours}}",
+  "tasks.repeat.everyWeeks": "{count, plural, one {Toutes les semaines} other {Toutes les # semaines}}",
+  "tasks.repeat.everyMonths": "{count, plural, one {Tous les mois} other {Tous les # mois}}",
+  "tasks.repeat.everyYears": "{count, plural, one {Tous les ans} other {Tous les # ans}}",
+  "tasks.repeatTitle": "Se répète : {rule}. La terminer crée la suivante.",
+  "editor.taskRepeat": "Répéter"
 }

@@ -21,11 +21,11 @@ const list = (...items) => schema.node('taskList', null, items);
 test('task decorations include nested tasks once, but never style ordinary prose tokens', () => {
   const doc = schema.node('doc', null, [
     p('ordinary !high due:2026-09-27'),
-    list(item(p('parent !low'), list(item(p('nested !high due:2026-09-28')))), item(p('sibling !med'))),
+    list(item(p('parent !low'), list(item(p('nested !high due:2026-09-28')))), item(p('sibling !med repeat:2w'))),
     p('ordinary !low'),
   ]);
   const tokens = buildTaskMetaDecorations(doc).find().map(({ from, to }) => doc.textBetween(from, to));
-  assert.deepEqual(tokens, ['!low', '!high', 'due:2026-09-28', '!med']);
+  assert.deepEqual(tokens, ['!low', '!high', 'due:2026-09-28', '!med', 'repeat:2w']);
   assert.deepEqual(buildTaskMetaDecorations(schema.node('doc', null, [p('!high'), p('due:2026-09-27')])).find(), []);
 });
 

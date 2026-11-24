@@ -88,8 +88,9 @@
 		tabletNavHidden = hidden;
 		localStorage.setItem('helix-tablet-nav-hidden', hidden ? '1' : '0');
 	}
-	import { openVault, restoreExternalVault, loadVaultState, saveVaultState, readNote, deleteNote, createDailyNote, createBackup, getPendingOpenFile, ackPendingOpenFile, getTasks, openExternalMarkdown, addQuickAccess, removeQuickAccess, getQuickAccess, setTheme, syncNow, setTaskDone, setTaskPriority, setTaskDue, setTaskRemind } from '$lib/api';
+	import { openVault, restoreExternalVault, loadVaultState, saveVaultState, readNote, deleteNote, createDailyNote, createBackup, getPendingOpenFile, ackPendingOpenFile, getTasks, openExternalMarkdown, addQuickAccess, removeQuickAccess, getQuickAccess, setTheme, syncNow, setTaskDone, setTaskPriority, setTaskDue, setTaskRemind, setTaskRepeat } from '$lib/api';
 	import { syncNativeReminders, takeReminderNote } from '$lib/utils/native-reminders';
+	import { repeatLabelsFrom } from '$lib/utils/task-recurrence';
 	import { darkThemes, isAndroid, isMobile as isMobileTarget } from '$lib/platform';
 	import { openNoteWindow } from '$lib/utils/window';
 	import { normalizeStartupView, resolveStartupTarget } from '$lib/utils/startup-view';
@@ -229,7 +230,7 @@
 					snooze10: $ui('reminders.snooze10'),
 					snooze60: $ui('reminders.snooze60'),
 					snoozeTomorrow: $ui('reminders.snoozeTomorrow'),
-				});
+				}, repeatLabelsFrom($ui));
 			} catch (error) {
 				console.error('Failed to sync reminders:', error);
 			}
@@ -839,6 +840,10 @@
 
 	async function changeTaskRemind(task: TaskItem, remind: string | null) {
 		await changeTask(task, () => setTaskRemind(ownerVault!, task.note_path, task.line, task.raw_line, remind));
+	}
+
+	async function changeTaskRepeat(task: TaskItem, repeat: string | null) {
+		await changeTask(task, () => setTaskRepeat(ownerVault!, task.note_path, task.line, task.raw_line, repeat));
 	}
 
 	async function handleDailyNote() {
@@ -1611,7 +1616,7 @@
 				<Sidebar bind:this={sidebar} onViewChanged={handleViewChanged} onBeforeNoteChange={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} />
 			</div>
 			<div class="mobile-panel" class:active={tabletLayout ? tabletNavShown && $mobileView !== 'sidebar' : $mobileView === 'notelist'}>
-				<NoteList bind:this={noteList} onNoteSelected={handleNoteSelected} onBeforeNoteSwitch={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforeNoteDuplicate={() => editor?.forceSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} onUpdateActiveNote={updateActiveNoteMetadata} onTagsChanged={handleTagsChanged} onRefreshTags={() => { if (!isMobile) void sidebar?.refreshTags(); }} onNoteMoved={() => sidebar?.refresh()} onNoteCreated={(token) => { editor?.focusTitle(token); }} onToggleTask={toggleTask} onSetTaskPriority={changeTaskPriority} onSetTaskDue={changeTaskDue} onSetTaskRemind={changeTaskRemind} />
+				<NoteList bind:this={noteList} onNoteSelected={handleNoteSelected} onBeforeNoteSwitch={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforeNoteDuplicate={() => editor?.forceSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} onUpdateActiveNote={updateActiveNoteMetadata} onTagsChanged={handleTagsChanged} onRefreshTags={() => { if (!isMobile) void sidebar?.refreshTags(); }} onNoteMoved={() => sidebar?.refresh()} onNoteCreated={(token) => { editor?.focusTitle(token); }} onToggleTask={toggleTask} onSetTaskPriority={changeTaskPriority} onSetTaskDue={changeTaskDue} onSetTaskRemind={changeTaskRemind} onSetTaskRepeat={changeTaskRepeat} />
 			</div>
 			<div class="mobile-panel mobile-editor-panel" class:active={$mobileView === 'editor' || tabletLayout}>
 				<Editor bind:this={editor} onMoveToTrash={trashOpenNote} onOutlineChange={handleOutlineChange} onShowTag={showTagNotes} />
@@ -1672,7 +1677,7 @@
 
 				{#if !$notelistCollapsed}
 					<div class="notelist-panel" style="width: {$notelistWidth}px">
-						<NoteList bind:this={noteList} onNoteSelected={handleNoteSelected} onBeforeNoteSwitch={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforeNoteDuplicate={() => editor?.forceSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} onUpdateActiveNote={updateActiveNoteMetadata} onTagsChanged={handleTagsChanged} onRefreshTags={() => { if (!isMobile) void sidebar?.refreshTags(); }} onNoteMoved={() => sidebar?.refresh()} onNoteCreated={(token) => { editor?.focusTitle(token); }} onToggleTask={toggleTask} onSetTaskPriority={changeTaskPriority} onSetTaskDue={changeTaskDue} onSetTaskRemind={changeTaskRemind} />
+						<NoteList bind:this={noteList} onNoteSelected={handleNoteSelected} onBeforeNoteSwitch={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforeNoteDuplicate={() => editor?.forceSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} onUpdateActiveNote={updateActiveNoteMetadata} onTagsChanged={handleTagsChanged} onRefreshTags={() => { if (!isMobile) void sidebar?.refreshTags(); }} onNoteMoved={() => sidebar?.refresh()} onNoteCreated={(token) => { editor?.focusTitle(token); }} onToggleTask={toggleTask} onSetTaskPriority={changeTaskPriority} onSetTaskDue={changeTaskDue} onSetTaskRemind={changeTaskRemind} onSetTaskRepeat={changeTaskRepeat} />
 					</div>
 
 					<ResizeHandle onResize={handleNotelistResize} />

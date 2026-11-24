@@ -1280,5 +1280,18 @@
   "reminders.snooze10": "10 min",
   "reminders.snooze60": "1 hour",
   "reminders.snoozeTomorrow": "Tomorrow",
-  "settings.reminderNotificationsDescAndroid": "Notify at each task's remind: time, even when HelixNotes is closed. Reminders can be snoozed from the notification."
+  "settings.reminderNotificationsDescAndroid": "Notify at each task's remind: time, even when HelixNotes is closed. Reminders can be snoozed from the notification.",
+  "tasks.repeat": "Повторять",
+  "tasks.repeatNone": "Не повторяется",
+  "tasks.repeat.daily": "Каждый день",
+  "tasks.repeat.weekdays": "По будням (пн–пт)",
+  "tasks.repeat.weekly": "Каждую неделю",
+  "tasks.repeat.monthly": "Каждый месяц",
+  "tasks.repeat.yearly": "Каждый год",
+  "tasks.repeat.everyDays": "{count, plural, one {Каждый # день} few {Каждые # дня} many {Каждые # дней} other {Каждые # дня}}",
+  "tasks.repeat.everyWeeks": "{count, plural, one {Каждую # неделю} few {Каждые # недели} many {Каждые # недель} other {Каждые # недели}}",
+  "tasks.repeat.everyMonths": "{count, plural, one {Каждый # месяц} few {Каждые # месяца} many {Каждые # месяцев} other {Каждые # месяца}}",
+  "tasks.repeat.everyYears": "{count, plural, one {Каждый # год} few {Каждые # года} many {Каждые # лет} other {Каждые # года}}",
+  "tasks.repeatTitle": "Повторяется: {rule}. После выполнения откроется следующая.",
+  "editor.taskRepeat": "Повтор"
 }

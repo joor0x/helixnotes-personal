@@ -593,6 +593,17 @@ export async function setTaskRemind(
   return invoke("set_task_remind", { vaultPath, notePath, line, rawLine, remind });
 }
 
+/** `daily`, `weekdays`, `weekly`, `monthly`, `yearly` or `<N><d|w|m|y>`; null clears it. */
+export async function setTaskRepeat(
+  vaultPath: string,
+  notePath: string,
+  line: number,
+  rawLine: string,
+  repeat: string | null,
+): Promise<void> {
+  return invoke("set_task_repeat", { vaultPath, notePath, line, rawLine, repeat });
+}
+
 export async function setReminderNotifications(enabled: boolean): Promise<void> {
   return invoke("set_reminder_notifications", { enabled });
 }

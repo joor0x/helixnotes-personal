@@ -44,3 +44,20 @@ test('the id survives a line move but not a new time or text', () => {
 test('repeated task lines in a note produce one reminder', () => {
   assert.equal(nativeReminders([task(), task({ line: 9 })]).length, 1);
 });
+
+test('a recurring reminder says how it repeats, and its next occurrence is a new reminder', () => {
+  const labels = {
+    daily: 'Cada día', weekdays: 'Laborables', weekly: 'Cada semana', monthly: 'Cada mes', yearly: 'Cada año',
+    every: (count) => `Cada ${count}`,
+  };
+  const weekly = task({ repeat: 'weekly', due: '2026-12-01' });
+  assert.equal(nativeReminders([weekly], labels)[0].body, 'Trabajo · 2026-12-01 · ↻ Cada semana');
+  assert.equal(nativeReminders([weekly])[0].body, 'Trabajo · 2026-12-01 · ↻ weekly');
+  // Completing it leaves the old line checked and opens the next one with a later reminder.
+  const reminders = nativeReminders([
+    { ...weekly, completed: true },
+    { ...weekly, due: '2026-12-08', remind: '2026-12-08T09:30' },
+  ], labels);
+  assert.deepEqual(reminders.map(r => r.at), ['2026-12-08T09:30']);
+  assert.notEqual(reminders[0].id, reminderId(weekly));
+});

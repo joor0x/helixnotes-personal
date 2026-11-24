@@ -72,6 +72,8 @@
 	import { clearFormatting } from '$lib/editor/clearFormatting';
 	import { toolbarLabels, resolveToolbarLayout, groupToolbarButtons, moveToolbarButton, toolbarLayoutPreference, type ToolbarButtonId, type ToolbarArea, type ResolvedToolbarLayout } from '$lib/editor/toolbar';
 	import { buildCodeCopyDecorations, buildTaskMetaDecorations, focusedPlaceholderDecorations } from '$lib/editor/decorations';
+	import { taskRecurrencePlugin } from '$lib/editor/recurrence';
+	import { REPEAT_PRESETS, repeatLabel, repeatLabelsFrom } from '$lib/utils/task-recurrence';
 	import { escapeBlockStarts, serializeImage, serializeInlineMarkdownKeepingDollars, serializeCodeBlock, joinMarkdownBlocks, joinListItemBlocks, type ListItemBlock, type MarkdownBlock } from '$lib/editor/markdown';
 	import { restoreTitleHeading, stripTitleHeading, type HiddenTitleHeading } from '$lib/editor/titleVisibility';
 	import { documentHeadings, sourceHeadings, activeHeadingIndex, mapDocumentHeadings, mapSourceHeadings, type OutlineHeading } from '$lib/editor/outline';
@@ -2257,7 +2259,7 @@
 		},
 	});
 
-	// Dim the inline task metadata tokens (!high / !medium / !med / !low and due:YYYY-MM-DD) inside
+	// Dim the inline task metadata tokens (!high / !medium / !med / !low, due:, remind:, repeat:) inside
 	// task items so they recede visually without disappearing. View-only inline decorations - the
 	// note text is untouched. Token shapes mirror the parser in commands.rs.
 	const taskMetaPluginKey = new PluginKey('taskMetaDim');
@@ -2266,6 +2268,14 @@
 		name: 'taskMetaDim',
 		addProseMirrorPlugins() {
 			return [lazyDecorationPlugin(taskMetaPluginKey, buildTaskMetaDecorations)];
+		},
+	});
+
+	// Ticking a recurring task (repeat:weekly ...) opens its next occurrence above it.
+	const TaskRecurrence = Extension.create({
+		name: 'taskRecurrence',
+		addProseMirrorPlugins() {
+			return [taskRecurrencePlugin()];
 		},
 	});
 
@@ -2685,13 +2695,16 @@
 		{ label: 'Due date', token: '', kind: 'due', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
 		{ label: 'Due date and time', token: '', kind: 'dueTime', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>' },
 		{ label: 'Reminder', token: '', kind: 'remind', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>' },
+		{ label: 'Repeat', token: '', kind: 'repeat', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>' },
 	];
 	let taskMetaMenu = $state<{ x: number; y: number; from: number; to: number; query: string } | null>(null);
 	let taskMetaSelectedIndex = $state(0);
 	let taskMetaTypedByUser = false;
-	let taskDuePicker = $state<{ x: number; y: number; kind: 'due' | 'dueTime' | 'remind' } | null>(null);
+	let taskDuePicker = $state<{ x: number; y: number; kind: 'due' | 'dueTime' | 'remind' | 'repeat' } | null>(null);
+	const taskRepeatLabels = $derived(repeatLabelsFrom($ui));
 	let taskDateTimeDraft = $state('');
 	let taskDueInputEl = $state<HTMLInputElement | null>(null);
+	let taskRepeatFirstEl = $state<HTMLButtonElement | null>(null);
 
 	let taskMetaFiltered = $derived.by(() => {
 		const q = (taskMetaMenu?.query || '').toLowerCase();
@@ -2742,6 +2755,13 @@
 		const { from, to, x, y } = taskMetaMenu;
 		taskMetaMenu = null;
 		taskMetaSelectedIndex = 0;
+		if (item.kind === 'repeat') {
+			editor.chain().focus().deleteRange({ from, to }).run();
+			taskDuePicker = { x, y, kind: 'repeat' };
+			const origin = captureOrigin();
+			tick().then(() => { if (taskDuePicker && isOriginCurrent(origin)) taskRepeatFirstEl?.focus(); });
+			return;
+		}
 		if (item.kind === 'due' || item.kind === 'dueTime' || item.kind === 'remind') {
 			editor.chain().focus().deleteRange({ from, to }).run();
 			const now = new Date();
@@ -2755,6 +2775,11 @@
 			return;
 		}
 		editor.chain().focus().deleteRange({ from, to }).insertContent(item.token + ' ').run();
+	}
+
+	function applyTaskRepeat(value: string) {
+		taskDuePicker = null;
+		editor?.chain().focus().insertContent(`repeat:${value} `).run();
 	}
 
 	function applyTaskDue(value: string) {
@@ -5825,6 +5850,7 @@
 					TargetRevealExtension,
 					ColorSwatch,
 				TaskMetaDim,
+				TaskRecurrence,
 				...($appConfig?.enable_wiki_links ? [WikiLink, WikiLinkAutocomplete] : []),
 				...($appConfig?.languagetool_enabled ? [LanguageTool.configure({
 					check: languageToolCheck,
@@ -9704,7 +9730,17 @@
 {#if taskDuePicker}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="slash-menu-overlay" onclick={(e) => closeFromOverlay(e, () => { taskDuePicker = null; editor?.commands.focus(); })} onkeydown={(e) => closeOnEscape(e, () => { taskDuePicker = null; editor?.commands.focus(); })}>
-		{#if taskDuePicker.kind === 'due'}
+		{#if taskDuePicker.kind === 'repeat'}
+			<div class="slash-menu task-repeat-picker" role="menu" aria-label={$ui('editor.taskRepeat')} style="left: {taskDuePicker.x}px; top: {taskDuePicker.y}px">
+				{#each REPEAT_PRESETS as preset, index}
+					{#if index === 0}
+						<button class="slash-menu-item" role="menuitem" bind:this={taskRepeatFirstEl} onclick={() => applyTaskRepeat(preset)}><span class="slash-menu-label">{repeatLabel(preset, taskRepeatLabels)}</span></button>
+					{:else}
+						<button class="slash-menu-item" role="menuitem" onclick={() => applyTaskRepeat(preset)}><span class="slash-menu-label">{repeatLabel(preset, taskRepeatLabels)}</span></button>
+					{/if}
+				{/each}
+			</div>
+		{:else if taskDuePicker.kind === 'due'}
 			<input
 				type="date"
 				class="task-due-input"

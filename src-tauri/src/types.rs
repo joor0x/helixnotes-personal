@@ -701,6 +701,9 @@ pub struct TaskItem {
     /// Local reminder time, `YYYY-MM-DDTHH:MM`.
     #[serde(default)]
     pub remind: Option<String>,
+    /// Recurrence rule in its canonical spelling (`weekly`, `2d`, ...).
+    #[serde(default)]
+    pub repeat: Option<String>,
     /// Note frontmatter tags plus `#tags` in the task line.
     #[serde(default)]
     pub tags: Vec<String>,

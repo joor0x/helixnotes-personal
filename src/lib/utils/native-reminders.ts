@@ -1,4 +1,5 @@
 import type { TaskItem } from '../types';
+import { repeatLabel, type RepeatLabels } from './task-recurrence.ts';
 
 /** A reminder as the Android scheduler stores it (see `Reminders.kt`). */
 export interface NativeReminder {
@@ -18,6 +19,11 @@ export interface NativeReminderLabels {
 }
 
 /**
+ * Completing a recurring task replaces it with its next occurrence, whose new `remind:` time
+ * makes a new id: the sync cancels the old alarm and notification and schedules the new one.
+ */
+
+/**
  * Identifies a reminder across syncs without line numbers, which shift as the note is
  * edited. Changing the task text or its time makes a new reminder, so it can fire again.
  */
@@ -26,18 +32,19 @@ export function reminderId(task: Pick<TaskItem, 'note_path' | 'text' | 'remind'>
 }
 
 /** Open tasks with a `remind:` time; identical task lines in one note count once. */
-export function nativeReminders(tasks: readonly TaskItem[]): NativeReminder[] {
+export function nativeReminders(tasks: readonly TaskItem[], repeatLabels?: RepeatLabels): NativeReminder[] {
   const reminders = new Map<string, NativeReminder>();
   for (const task of tasks) {
     if (task.completed || !task.remind) continue;
     const id = reminderId(task);
     if (reminders.has(id)) continue;
     const due = task.due ? ` · ${task.due}${task.due_time ? ` ${task.due_time}` : ''}` : '';
+    const repeat = task.repeat ? ` · ↻ ${repeatLabels ? repeatLabel(task.repeat, repeatLabels) : task.repeat}` : '';
     reminders.set(id, {
       id,
       at: task.remind,
       title: task.text.trim() || task.note_title,
-      body: `${task.note_title}${due}`,
+      body: `${task.note_title}${due}${repeat}`,
       path: task.note_path,
     });
   }
@@ -54,10 +61,14 @@ function bridge(): ReminderBridge | undefined {
 }
 
 /** Hands the reminders to Android, replacing the ones it knew. False without the bridge. */
-export function syncNativeReminders(tasks: readonly TaskItem[], labels: NativeReminderLabels): boolean {
+export function syncNativeReminders(
+  tasks: readonly TaskItem[],
+  labels: NativeReminderLabels,
+  repeatLabels?: RepeatLabels,
+): boolean {
   const android = bridge();
   if (typeof android?.syncReminders !== 'function') return false;
-  android.syncReminders(JSON.stringify({ reminders: nativeReminders(tasks), labels }));
+  android.syncReminders(JSON.stringify({ reminders: nativeReminders(tasks, repeatLabels), labels }));
   return true;
 }
 

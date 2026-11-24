@@ -1280,5 +1280,18 @@
   "reminders.snooze10": "10 min",
   "reminders.snooze60": "1 hour",
   "reminders.snoozeTomorrow": "Tomorrow",
-  "settings.reminderNotificationsDescAndroid": "Notify at each task's remind: time, even when HelixNotes is closed. Reminders can be snoozed from the notification."
+  "settings.reminderNotificationsDescAndroid": "Notify at each task's remind: time, even when HelixNotes is closed. Reminders can be snoozed from the notification.",
+  "tasks.repeat": "Repeat",
+  "tasks.repeatNone": "Does not repeat",
+  "tasks.repeat.daily": "Daily",
+  "tasks.repeat.weekdays": "Weekdays (Mon–Fri)",
+  "tasks.repeat.weekly": "Weekly",
+  "tasks.repeat.monthly": "Monthly",
+  "tasks.repeat.yearly": "Yearly",
+  "tasks.repeat.everyDays": "{count, plural, one {Every day} other {Every # days}}",
+  "tasks.repeat.everyWeeks": "{count, plural, one {Every week} other {Every # weeks}}",
+  "tasks.repeat.everyMonths": "{count, plural, one {Every month} other {Every # months}}",
+  "tasks.repeat.everyYears": "{count, plural, one {Every year} other {Every # years}}",
+  "tasks.repeatTitle": "Repeats: {rule}. Completing it opens the next occurrence.",
+  "editor.taskRepeat": "Repeat"
 }

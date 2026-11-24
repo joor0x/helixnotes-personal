@@ -9,14 +9,16 @@
 	import type { TaskItem, FileEvent } from '$lib/types';
 	import { isCurrentVaultEvent } from '$lib/utils/note-list-updates';
 	import { formatLocalDate } from '$lib/utils/time';
+	import { REPEAT_PRESETS, repeatLabel, repeatLabelsFrom } from '$lib/utils/task-recurrence';
 	import { matchesTaskDueFilter, formatLocalTime, taskDueKey, isTaskOverdue, matchesTaskTag, collectTaskTags, composeDue, type TaskDueFilter } from '$lib/utils/task-filter';
 
-	let { onOpenTask = (_t: TaskItem) => {}, onToggleTask = async (_t: TaskItem) => {}, onSetTaskPriority = async (_t: TaskItem, _p: string | null) => {}, onSetTaskDue = async (_t: TaskItem, _d: string | null) => {}, onSetTaskRemind = async (_t: TaskItem, _r: string | null) => {} }: {
+	let { onOpenTask = (_t: TaskItem) => {}, onToggleTask = async (_t: TaskItem) => {}, onSetTaskPriority = async (_t: TaskItem, _p: string | null) => {}, onSetTaskDue = async (_t: TaskItem, _d: string | null) => {}, onSetTaskRemind = async (_t: TaskItem, _r: string | null) => {}, onSetTaskRepeat = async (_t: TaskItem, _r: string | null) => {} }: {
 		onOpenTask?: (t: TaskItem) => void;
 		onToggleTask?: (t: TaskItem) => Promise<void>;
 		onSetTaskPriority?: (t: TaskItem, p: string | null) => Promise<void>;
 		onSetTaskDue?: (t: TaskItem, d: string | null) => Promise<void>;
 		onSetTaskRemind?: (t: TaskItem, r: string | null) => Promise<void>;
+		onSetTaskRepeat?: (t: TaskItem, r: string | null) => Promise<void>;
 	} = $props();
 
 	let tasks = $state<TaskItem[]>([]);
@@ -192,15 +194,28 @@
 	let remindMenuFor = $state<string | null>(null);
 	let dueDraft = $state({ date: '', time: '' });
 	let remindDraft = $state('');
+	let repeatMenuFor = $state<string | null>(null);
+	const repeatLabels = $derived(repeatLabelsFrom($ui));
+
+	function openRepeatMenu(t: TaskItem) {
+		prioMenuFor = null; dueMenuFor = null; remindMenuFor = null;
+		repeatMenuFor = repeatMenuFor === rowKey(t) ? null : rowKey(t);
+	}
+
+	async function chooseRepeat(t: TaskItem, r: string | null) {
+		repeatMenuFor = null;
+		await onSetTaskRepeat(t, r);
+		await loadNote(t.note_path);
+	}
 
 	function openDueMenu(t: TaskItem) {
-		prioMenuFor = null; remindMenuFor = null;
+		prioMenuFor = null; remindMenuFor = null; repeatMenuFor = null;
 		dueDraft = { date: t.due ?? '', time: t.due_time ?? '' };
 		dueMenuFor = dueMenuFor === rowKey(t) ? null : rowKey(t);
 	}
 
 	function openRemindMenu(t: TaskItem) {
-		prioMenuFor = null; dueMenuFor = null;
+		prioMenuFor = null; dueMenuFor = null; repeatMenuFor = null;
 		// Default: the due time if there is one, else 09:00 on the due date or today.
 		remindDraft = t.remind ?? `${t.due ?? today}T${t.due_time ?? '09:00'}`;
 		remindMenuFor = remindMenuFor === rowKey(t) ? null : rowKey(t);
@@ -309,9 +324,9 @@
 </script>
 
 <div class="tasks-view" class:mobile={isMobile}>
-	{#if prioMenuFor || dueMenuFor || remindMenuFor}
+	{#if prioMenuFor || dueMenuFor || remindMenuFor || repeatMenuFor}
 		<!-- svelte-ignore a11y_consider_explicit_label -->
-		<button class="prio-backdrop" onclick={() => { prioMenuFor = null; dueMenuFor = null; remindMenuFor = null; }} aria-label={$ui("ui.close_menu")}></button>
+		<button class="prio-backdrop" onclick={() => { prioMenuFor = null; dueMenuFor = null; remindMenuFor = null; repeatMenuFor = null; }} aria-label={$ui("ui.close_menu")}></button>
 	{/if}
 	<div class="tasks-controls">
 		<input class="tasks-filter" type="text" placeholder={$ui("ui.filter_tasks")} bind:value={taskQuery} onkeydown={(e) => { if (e.key === 'Escape') taskQuery = ''; }} aria-label={$ui("ui.filter_tasks_by_text")} />
@@ -361,7 +376,7 @@
 							class:set={!!t.priority}
 							title={$ui("ui.set_priority")}
 							aria-label={$ui("ui.set_priority")}
-							onclick={(e) => { e.stopPropagation(); dueMenuFor = null; remindMenuFor = null; prioMenuFor = prioMenuFor === rowKey(t) ? null : rowKey(t); }}
+							onclick={(e) => { e.stopPropagation(); dueMenuFor = null; remindMenuFor = null; repeatMenuFor = null; prioMenuFor = prioMenuFor === rowKey(t) ? null : rowKey(t); }}
 						>{t.priority ?? '!'}</button>
 						{#if prioMenuFor === rowKey(t)}
 							<div class="prio-menu" role="menu">
@@ -414,6 +429,28 @@
 									<button class="prio-opt" disabled={!remindDraft} onclick={() => chooseRemind(t, remindDraft.slice(0, 16))}>{$ui("tasks.save")}</button>
 									{#if t.remind}<button class="prio-opt prio-clear" onclick={() => chooseRemind(t, null)}>{$ui("ui.clear")}</button>{/if}
 								</div>
+							</div>
+						{/if}
+					</span>
+					<span class="task-due-wrap">
+						<button
+							class="task-remind task-repeat"
+							class:set={!!t.repeat}
+							title={t.repeat ? $ui("tasks.repeatTitle", { rule: repeatLabel(t.repeat, repeatLabels) }) : $ui("tasks.repeat")}
+							aria-label={$ui("tasks.repeat")}
+							onclick={(e) => { e.stopPropagation(); openRepeatMenu(t); }}
+						>
+							<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+							{#if t.repeat}<span>{repeatLabel(t.repeat, repeatLabels)}</span>{/if}
+						</button>
+						{#if repeatMenuFor === rowKey(t)}
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div class="prio-menu repeat-menu" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+								{#each REPEAT_PRESETS as preset}
+									<button class="prio-opt" class:active={t.repeat === preset} onclick={() => chooseRepeat(t, preset)}>{repeatLabel(preset, repeatLabels)}</button>
+								{/each}
+								{#if t.repeat}<button class="prio-opt prio-clear" onclick={() => chooseRepeat(t, null)}>{$ui("tasks.repeatNone")}</button>{/if}
 							</div>
 						{/if}
 					</span>
@@ -783,6 +820,8 @@
 		background: var(--bg-secondary);
 	}
 	.remind-menu { left: auto; right: 0; }
+	.repeat-menu { left: auto; right: 0; min-width: 150px; white-space: nowrap; }
+	.repeat-menu .prio-opt.active { font-weight: 600; color: var(--accent); }
 	.due-actions { display: flex; gap: 4px; }
 	.tasks-tag-filter { max-width: 140px; }
 	.task-note {
