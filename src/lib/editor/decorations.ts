@@ -37,7 +37,7 @@ export function buildCodeCopyDecorations(doc: ProseMirrorNode): DecorationSet {
 }
 
 const priority = /(^|\s)(!(?:high|medium|med|low))\b/gi;
-const due = /\bdue:\d{4}-\d{2}-\d{2}\b/gi;
+const due = /\b(?:due:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|remind:\d{4}-\d{2}-\d{2}T\d{2}:\d{2})\b/gi;
 
 export function buildTaskMetaDecorations(doc: ProseMirrorNode): DecorationSet {
 	const decorations: Decoration[] = [];

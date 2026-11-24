@@ -74,6 +74,7 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 hmac = "0.12"
 tauri-plugin-updater = "2"
+tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
 arboard = { version = "3", features = ["image-data", "wayland-data-control"] }

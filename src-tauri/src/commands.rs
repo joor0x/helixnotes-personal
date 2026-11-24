@@ -1704,9 +1704,29 @@ fn scan_tasks(vault_path: &str, note_path: Option<&str>) -> Result<Vec<TaskItem>
 
     if let Some(path) = note_path {
         let note = operations::read_vault_note(vault_path, path)?;
-        return Ok(parse_note_tasks(path, &note.meta.title, &note.content));
+        return Ok(parse_note_tasks(
+            path,
+            &note.meta.title,
+            &note.content,
+            &note.meta.tags,
+        ));
     }
 
+    Ok(vault_markdown_files(vault_path)
+        .par_iter()
+        .flat_map(|path| {
+            let Ok(raw) = std::fs::read_to_string(path) else {
+                return Vec::new();
+            };
+            let filename = path.file_name().unwrap_or_default().to_string_lossy();
+            let (meta, body) = crate::vault::frontmatter::parse_note(&raw, &filename);
+            parse_note_tasks(&path.to_string_lossy(), &meta.title, &body, &meta.tags)
+        })
+        .collect())
+}
+
+/// Every Markdown note in the vault, skipping hidden folders and `.helixnotes`.
+pub(crate) fn vault_markdown_files(vault_path: &str) -> Vec<PathBuf> {
     let vault = Path::new(vault_path);
     let hn_dir = operations::helixnotes_dir(vault_path);
     let paths: Vec<PathBuf> = walkdir::WalkDir::new(vault)
@@ -1726,27 +1746,19 @@ fn scan_tasks(vault_path: &str, note_path: Option<&str>) -> Result<Vec<TaskItem>
         })
         .map(|entry| entry.into_path())
         .collect();
-
-    Ok(paths
-        .par_iter()
-        .flat_map(|path| {
-            let Ok(raw) = std::fs::read_to_string(path) else {
-                return Vec::new();
-            };
-            let filename = path.file_name().unwrap_or_default().to_string_lossy();
-            let (meta, body) = crate::vault::frontmatter::parse_note(&raw, &filename);
-            parse_note_tasks(&path.to_string_lossy(), &meta.title, &body)
-        })
-        .collect())
+    paths
 }
 
-fn parse_note_tasks(note_path: &str, note_title: &str, body: &str) -> Vec<TaskItem> {
+pub(crate) fn parse_note_tasks(
+    note_path: &str,
+    note_title: &str,
+    body: &str,
+    note_tags: &[String],
+) -> Vec<TaskItem> {
     use std::sync::LazyLock;
 
     static TASK_RE: LazyLock<regex::Regex> =
         LazyLock::new(|| regex::Regex::new(r"^\s*[-*]\s\[([ xX])\]\s+(.+?)\s*$").unwrap());
-    static DUE_RE: LazyLock<regex::Regex> =
-        LazyLock::new(|| regex::Regex::new(r"\bdue:(\d{4}-\d{2}-\d{2})\b").unwrap());
     static PRIORITY_RE: LazyLock<regex::Regex> =
         LazyLock::new(|| regex::Regex::new(r"(?i)(?:^|\s)!(high|medium|med|low)\b").unwrap());
 
@@ -1757,9 +1769,14 @@ fn parse_note_tasks(note_path: &str, note_title: &str, body: &str) -> Vec<TaskIt
         };
         let completed = !caps[1].trim().is_empty();
         let content = &caps[2];
-        let due = DUE_RE
-            .captures(content)
-            .map(|captures| captures[1].to_string());
+        let (due, due_time) = crate::reminders::parse_due(content);
+        let remind = crate::reminders::parse_remind(content);
+        let mut tags = note_tags.to_vec();
+        for tag in crate::reminders::inline_tags(content) {
+            if !tags.iter().any(|t| t.eq_ignore_ascii_case(&tag)) {
+                tags.push(tag);
+            }
+        }
         let priority = PRIORITY_RE.captures(content).map(|captures| {
             let priority = captures[1].to_lowercase();
             if priority == "medium" {
@@ -1768,7 +1785,7 @@ fn parse_note_tasks(note_path: &str, note_title: &str, body: &str) -> Vec<TaskIt
                 priority
             }
         });
-        let text = DUE_RE.replace_all(content, "");
+        let text = crate::reminders::strip_schedule(content);
         let text = PRIORITY_RE.replace_all(&text, " ");
         tasks.push(TaskItem {
             note_path: note_path.to_string(),
@@ -1778,6 +1795,9 @@ fn parse_note_tasks(note_path: &str, note_title: &str, body: &str) -> Vec<TaskIt
             text: text.split_whitespace().collect::<Vec<_>>().join(" "),
             completed,
             due,
+            due_time,
+            remind,
+            tags,
             priority,
         });
     }
@@ -2104,16 +2124,6 @@ pub async fn set_task_priority(
     Ok(())
 }
 
-fn set_due_on_line(line: &str, due: Option<&str>) -> String {
-    let due_re = regex::Regex::new(r"(?:^|\s)due:\d{4}-\d{2}-\d{2}\b").unwrap();
-    let stripped = due_re.replace_all(line, "").to_string();
-    let stripped = stripped.trim_end();
-    match due {
-        Some(d) => format!("{} due:{}", stripped, d),
-        None => stripped.to_string(),
-    }
-}
-
 #[tauri::command]
 pub async fn set_task_due(
     state: State<'_, AppState>,
@@ -2123,14 +2133,44 @@ pub async fn set_task_due(
     raw_line: String,
     due: Option<String>,
 ) -> Result<(), String> {
-    // Validate format (YYYY-MM-DD); None/empty clears the due date.
-    let date_re = regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
-    let due_val: Option<&str> = match due.as_deref() {
-        None | Some("") => None,
-        Some(d) if date_re.is_match(d) => Some(d),
-        Some(_) => return Err("Invalid due date".to_string()),
-    };
+    // YYYY-MM-DD or YYYY-MM-DDTHH:MM; None/empty clears the due date.
+    let due = crate::reminders::validate_due(due.as_deref())?;
+    set_task_token(state, vault_path, note_path, line, raw_line, "due", due).await
+}
 
+#[tauri::command]
+pub async fn set_task_remind(
+    state: State<'_, AppState>,
+    vault_path: String,
+    note_path: String,
+    line: usize,
+    raw_line: String,
+    remind: Option<String>,
+) -> Result<(), String> {
+    // YYYY-MM-DDTHH:MM (local time); None/empty clears the reminder.
+    let remind = crate::reminders::validate_remind(remind.as_deref())?;
+    set_task_token(
+        state, vault_path, note_path, line, raw_line, "remind", remind,
+    )
+    .await
+}
+
+#[tauri::command]
+pub fn set_reminder_notifications(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    config.reminder_notifications = enabled;
+    save_app_config(&config)
+}
+
+async fn set_task_token(
+    state: State<'_, AppState>,
+    vault_path: String,
+    note_path: String,
+    line: usize,
+    raw_line: String,
+    key: &str,
+    value: Option<String>,
+) -> Result<(), String> {
     let search = state.vault_snapshot(&vault_path)?;
     let _write_guard = state.note_save.lock().await;
     let NoteContent {
@@ -2149,7 +2189,7 @@ pub async fn set_task_due(
             .ok_or("Task line not found (note changed)")?
     };
 
-    let updated = set_due_on_line(&lines[idx], due_val);
+    let updated = crate::reminders::set_token_on_line(&lines[idx], key, value.as_deref());
     if updated == lines[idx] {
         return Ok(());
     }

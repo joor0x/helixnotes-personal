@@ -583,6 +583,20 @@ export async function setTaskDue(
   return invoke("set_task_due", { vaultPath, notePath, line, rawLine, due });
 }
 
+export async function setTaskRemind(
+  vaultPath: string,
+  notePath: string,
+  line: number,
+  rawLine: string,
+  remind: string | null,
+): Promise<void> {
+  return invoke("set_task_remind", { vaultPath, notePath, line, rawLine, remind });
+}
+
+export async function setReminderNotifications(enabled: boolean): Promise<void> {
+  return invoke("set_reminder_notifications", { enabled });
+}
+
 // ── Sync (WebDAV) ──
 
 export async function setSyncSettings(

@@ -169,6 +169,7 @@ export interface AppConfig {
   ask_image_name?: boolean;
   /** Attachments folder for files outside the vault, relative to their project root. */
   external_attachments_folder?: string;
+  reminder_notifications?: boolean;
   languagetool_enabled?: boolean;
   languagetool_url?: string | null;
   languagetool_language?: string;
@@ -312,6 +313,13 @@ export interface TaskItem {
   raw_line: string;
   text: string;
   completed: boolean;
+  /** Due date, YYYY-MM-DD. */
   due: string | null;
+  /** Optional local due time, HH:MM. */
+  due_time?: string | null;
+  /** Local reminder, YYYY-MM-DDTHH:MM. */
+  remind?: string | null;
+  /** Note tags plus #tags in the task line. */
+  tags?: string[];
   priority: string | null;
 }

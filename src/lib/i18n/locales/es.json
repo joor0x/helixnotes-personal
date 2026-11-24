@@ -1264,5 +1264,21 @@
   "image.askName": "Preguntar el nombre al pegar imágenes",
   "image.askNameDesc": "Pon nombre a las imágenes pegadas o arrastradas antes de guardarlas",
   "image.externalFolder": "Carpeta de adjuntos para archivos fuera del vault",
-  "image.externalFolderHint": "Relativa al proyecto (el repositorio git o, si no hay, la carpeta del archivo) y enlazada con rutas relativas. Cada proyecto puede elegir la suya con un archivo .helixnotes.json en su raíz cuya clave attachmentsFolder indique la carpeta, por ejemplo docs/img."
+  "image.externalFolderHint": "Relativa al proyecto (el repositorio git o, si no hay, la carpeta del archivo) y enlazada con rutas relativas. Cada proyecto puede elegir la suya con un archivo .helixnotes.json en su raíz cuya clave attachmentsFolder indique la carpeta, por ejemplo docs/img.",
+  "tasks.tagFilter": "Filtrar por etiqueta",
+  "tasks.allTags": "Todas las etiquetas",
+  "tasks.dueTime": "Hora de vencimiento",
+  "tasks.dueTimeHint": "Opcional. Déjala vacía para una tarea de todo el día.",
+  "tasks.save": "Guardar",
+  "tasks.setReminder": "Añadir recordatorio",
+  "tasks.reminderAt": "Recordatorio: {time}",
+  "settings.reminderNotifications": "Notificaciones de recordatorios",
+  "settings.reminderNotificationsDesc": "Muestra una notificación del sistema a la hora remind: de cada tarea mientras HelixNotes está abierto (también en la bandeja).",
+  "editor.taskDueDateTime": "Fecha y hora de vencimiento",
+  "editor.taskReminder": "Recordatorio",
+  "reminders.channel": "Recordatorios",
+  "reminders.snooze10": "10 min",
+  "reminders.snooze60": "1 hora",
+  "reminders.snoozeTomorrow": "Mañana",
+  "settings.reminderNotificationsDescAndroid": "Avisa a la hora remind: de cada tarea aunque HelixNotes esté cerrado. Los recordatorios se pueden posponer desde la notificación."
 }

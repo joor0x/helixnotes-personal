@@ -2683,11 +2683,14 @@
 		{ label: 'Medium priority', token: '!med', kind: 'prio', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>' },
 		{ label: 'Low priority', token: '!low', kind: 'prio', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>' },
 		{ label: 'Due date', token: '', kind: 'due', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
+		{ label: 'Due date and time', token: '', kind: 'dueTime', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>' },
+		{ label: 'Reminder', token: '', kind: 'remind', icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>' },
 	];
 	let taskMetaMenu = $state<{ x: number; y: number; from: number; to: number; query: string } | null>(null);
 	let taskMetaSelectedIndex = $state(0);
 	let taskMetaTypedByUser = false;
-	let taskDuePicker = $state<{ x: number; y: number } | null>(null);
+	let taskDuePicker = $state<{ x: number; y: number; kind: 'due' | 'dueTime' | 'remind' } | null>(null);
+	let taskDateTimeDraft = $state('');
 	let taskDueInputEl = $state<HTMLInputElement | null>(null);
 
 	let taskMetaFiltered = $derived.by(() => {
@@ -2739,9 +2742,14 @@
 		const { from, to, x, y } = taskMetaMenu;
 		taskMetaMenu = null;
 		taskMetaSelectedIndex = 0;
-		if (item.kind === 'due') {
+		if (item.kind === 'due' || item.kind === 'dueTime' || item.kind === 'remind') {
 			editor.chain().focus().deleteRange({ from, to }).run();
-			taskDuePicker = { x, y };
+			const now = new Date();
+			const pad = (n: number) => String(n).padStart(2, '0');
+			// Next full hour, local time.
+			const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1);
+			taskDateTimeDraft = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(next.getHours())}:00`;
+			taskDuePicker = { x, y, kind: item.kind };
 			const origin = captureOrigin();
 			tick().then(() => { if (taskDuePicker && isOriginCurrent(origin)) { taskDueInputEl?.focus(); taskDueInputEl?.showPicker?.(); } });
 			return;
@@ -2750,9 +2758,13 @@
 	}
 
 	function applyTaskDue(value: string) {
+		const kind = taskDuePicker?.kind ?? 'due';
 		taskDuePicker = null;
 		if (!editor) return;
-		if (value) editor.chain().focus().insertContent(`due:${value} `).run();
+		// datetime-local may carry seconds; the task syntax uses minutes.
+		const token = kind === 'remind' ? 'remind' : 'due';
+		const normalized = kind === 'due' ? value : value.slice(0, 16);
+		if (normalized) editor.chain().focus().insertContent(`${token}:${normalized} `).run();
 		else editor.commands.focus();
 	}
 
@@ -9692,14 +9704,29 @@
 {#if taskDuePicker}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="slash-menu-overlay" onclick={(e) => closeFromOverlay(e, () => { taskDuePicker = null; editor?.commands.focus(); })} onkeydown={(e) => closeOnEscape(e, () => { taskDuePicker = null; editor?.commands.focus(); })}>
-		<input
-			type="date"
-			class="task-due-input"
-			bind:this={taskDueInputEl}
-			style="left: {taskDuePicker.x}px; top: {taskDuePicker.y}px"
-			onchange={(e) => applyTaskDue((e.currentTarget as HTMLInputElement).value)}
-			onkeydown={(e) => { if (e.key === 'Escape') { taskDuePicker = null; editor?.commands.focus(); } }}
-		/>
+		{#if taskDuePicker.kind === 'due'}
+			<input
+				type="date"
+				class="task-due-input"
+				bind:this={taskDueInputEl}
+				style="left: {taskDuePicker.x}px; top: {taskDuePicker.y}px"
+				onchange={(e) => applyTaskDue((e.currentTarget as HTMLInputElement).value)}
+				onkeydown={(e) => { if (e.key === 'Escape') { taskDuePicker = null; editor?.commands.focus(); } }}
+			/>
+		{:else}
+			<!-- A date-time is only complete after both parts: confirm with Enter or the button. -->
+			<form class="task-datetime-picker" style="left: {taskDuePicker.x}px; top: {taskDuePicker.y}px" onsubmit={(e) => { e.preventDefault(); applyTaskDue(taskDateTimeDraft); }}>
+				<input
+					type="datetime-local"
+					class="task-due-input"
+					aria-label={taskDuePicker.kind === 'remind' ? $ui('editor.taskReminder') : $ui('editor.taskDueDateTime')}
+					bind:this={taskDueInputEl}
+					bind:value={taskDateTimeDraft}
+					onkeydown={(e) => { if (e.key === 'Escape') { taskDuePicker = null; editor?.commands.focus(); } }}
+				/>
+				<button type="submit" disabled={!taskDateTimeDraft}>{$ui('tasks.save')}</button>
+			</form>
+		{/if}
 	</div>
 {/if}
 
@@ -13271,6 +13298,31 @@
 		font: inherit;
 		box-shadow: var(--shadow-lg);
 	}
+
+	.task-datetime-picker {
+		position: fixed;
+		z-index: 1501;
+		display: flex;
+		gap: 6px;
+		align-items: center;
+		padding: 6px;
+		background: var(--bg-primary);
+		border: 1px solid var(--border-color);
+		border-radius: 8px;
+		box-shadow: var(--shadow-lg);
+	}
+	.task-datetime-picker .task-due-input { position: static; box-shadow: none; padding: 4px 6px; }
+	.task-datetime-picker button {
+		padding: 5px 10px;
+		border-radius: 6px;
+		border: 1px solid var(--accent);
+		background: var(--accent);
+		color: white;
+		font: inherit;
+		font-size: 12px;
+		cursor: pointer;
+	}
+	.task-datetime-picker button:disabled { opacity: 0.5; cursor: default; }
 
 	.slash-menu {
 		position: fixed;

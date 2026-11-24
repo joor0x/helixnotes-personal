@@ -9,6 +9,7 @@ mod image_proxy;
 mod languagetool;
 #[cfg(desktop)]
 pub mod mcp;
+mod reminders;
 mod search;
 mod search_folders;
 mod state;
@@ -86,6 +87,11 @@ pub fn run() {
         .setup(move |app| {
             #[cfg(desktop)]
             mcp::McpRuntime::install(app.handle());
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_notification::init())?;
+                reminders::spawn_scheduler(app.handle().clone());
+            }
             #[cfg(target_os = "ios")]
             app.handle().plugin(tauri_plugin_ios_vault_access::init())?;
 
@@ -227,6 +233,8 @@ pub fn run() {
             commands::set_task_done,
             commands::set_task_priority,
             commands::set_task_due,
+            commands::set_task_remind,
+            commands::set_reminder_notifications,
             commands::search_notes,
             search_folders::add_search_folder,
             search_folders::remove_search_folder,

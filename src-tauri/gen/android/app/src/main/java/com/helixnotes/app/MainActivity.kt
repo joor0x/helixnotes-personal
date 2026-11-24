@@ -20,6 +20,51 @@ class MainActivity : TauriActivity() {
 
   companion object {
     private const val STORAGE_PERMISSION_REQUEST_CODE = 1001
+    private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1002
+    private const val NOTIFICATION_PERMISSION = "android.permission.POST_NOTIFICATIONS"
+  }
+
+  /** The note of the reminder notification that opened the app, until the web app takes it. */
+  @Volatile private var pendingReminderNote: String? = null
+
+  override fun onCreate(savedInstanceState: android.os.Bundle?) {
+    super.onCreate(savedInstanceState)
+    // A restored activity gets its launch intent again; the reminder was already opened.
+    if (savedInstanceState == null) captureReminderNote(intent)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    if (captureReminderNote(intent)) {
+      webView?.evaluateJavascript("window.dispatchEvent(new Event('helix-reminder-open'))", null)
+    }
+  }
+
+  private fun captureReminderNote(intent: Intent?): Boolean {
+    if (intent?.action != Reminders.ACTION_OPEN) return false
+    val path = intent.getStringExtra(Reminders.EXTRA_NOTE_PATH)
+    if (path.isNullOrEmpty()) return false
+    pendingReminderNote = path
+    return true
+  }
+
+  fun takeReminderNote(): String {
+    val path = pendingReminderNote ?: ""
+    pendingReminderNote = null
+    return path
+  }
+
+  /** Android 13+ asks the user; once is enough, the system settings cover later changes. */
+  fun requestNotificationPermission() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    if (ContextCompat.checkSelfPermission(this, NOTIFICATION_PERMISSION) ==
+      PackageManager.PERMISSION_GRANTED) return
+    val prefs = getSharedPreferences("helix_reminders", MODE_PRIVATE)
+    if (prefs.getBoolean("permission_asked", false)) return
+    prefs.edit().putBoolean("permission_asked", true).apply()
+    ActivityCompat.requestPermissions(
+      this, arrayOf(NOTIFICATION_PERMISSION), NOTIFICATION_PERMISSION_REQUEST_CODE
+    )
   }
 
   override fun onWebViewCreate(webView: WebView) {
@@ -166,5 +211,19 @@ class StorageBridge(private val activity: MainActivity) {
     activity.runOnUiThread {
       activity.openFile(path)
     }
+  }
+
+  /** Hands the open reminders of the active vault to the native scheduler. */
+  @JavascriptInterface
+  fun syncReminders(json: String) {
+    if (Reminders.sync(activity, json) > 0) {
+      activity.runOnUiThread { activity.requestNotificationPermission() }
+    }
+  }
+
+  /** The note to open when a reminder notification was tapped, or an empty string. */
+  @JavascriptInterface
+  fun takeReminderNote(): String {
+    return activity.takeReminderNote()
   }
 }

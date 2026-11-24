@@ -1264,5 +1264,21 @@
   "image.askName": "Ask for a name when pasting images",
   "image.askNameDesc": "Name pasted or dropped images before they are saved",
   "image.externalFolder": "Attachments folder for files outside the vault",
-  "image.externalFolderHint": "Relative to the project (the git repository, or else the file's folder) and linked relatively. A project can choose its own with a .helixnotes.json file at its root whose attachmentsFolder key names the folder, e.g. docs/img."
+  "image.externalFolderHint": "Relative to the project (the git repository, or else the file's folder) and linked relatively. A project can choose its own with a .helixnotes.json file at its root whose attachmentsFolder key names the folder, e.g. docs/img.",
+  "tasks.tagFilter": "Filter by tag",
+  "tasks.allTags": "All tags",
+  "tasks.dueTime": "Due time",
+  "tasks.dueTimeHint": "Optional. Leave empty for an all-day task.",
+  "tasks.save": "Save",
+  "tasks.setReminder": "Set reminder",
+  "tasks.reminderAt": "Reminder: {time}",
+  "settings.reminderNotifications": "Reminder notifications",
+  "settings.reminderNotificationsDesc": "Show a system notification at each task's remind: time while HelixNotes is running (also in the tray).",
+  "editor.taskDueDateTime": "Due date and time",
+  "editor.taskReminder": "Reminder",
+  "reminders.channel": "Reminders",
+  "reminders.snooze10": "10 min",
+  "reminders.snooze60": "1 hour",
+  "reminders.snoozeTomorrow": "Tomorrow",
+  "settings.reminderNotificationsDescAndroid": "Notify at each task's remind: time, even when HelixNotes is closed. Reminders can be snoozed from the notification."
 }

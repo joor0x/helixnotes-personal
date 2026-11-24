@@ -11,7 +11,7 @@
 	import AiModelPicker from './AiModelPicker.svelte';
 	import { AI_CLI_PROVIDERS, isCliProvider, cliProviderInfo } from '$lib/ai-cli';
 	import { showSettings, syncState, theme, resolvedTheme, appConfig, platformIsMobile, activeVaultConfig, updateAvailable as globalUpdateAvailable, updateObj as globalUpdateObj, installType, settingsTab, vaultReady, androidApkUrl, checkForUpdateMobile, notebookSortMode, isManagedInstall, customThemes } from '$lib/stores/app';
-	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setLanguageToolSettings, addSearchFolder, removeSearchFolder, setAttachmentSettings, setSyncSettings, testSyncConnection, syncNow, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments } from '$lib/api';
+	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setLanguageToolSettings, addSearchFolder, removeSearchFolder, setAttachmentSettings, setSyncSettings, testSyncConnection, syncNow, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments, setReminderNotifications } from '$lib/api';
 	import { darkThemes, isMobile, isAndroid } from '$lib/platform';
 	import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 	import { listen } from '@tauri-apps/api/event';
@@ -1000,6 +1000,19 @@
 	}
 	let showTrayIcon = $state($appConfig?.show_tray_icon ?? false);
 	let closeToTray = $state($appConfig?.close_to_tray ?? false);
+	let reminderNotifications = $state($appConfig?.reminder_notifications ?? true);
+
+	async function toggleReminderNotifications() {
+		reminderNotifications = !reminderNotifications;
+		const enabled = reminderNotifications;
+		try {
+			await setReminderNotifications(enabled);
+			appConfig.update(config => config ? { ...config, reminder_notifications: enabled } : config);
+		} catch (error) {
+			reminderNotifications = !enabled;
+			console.error('Failed to save reminder setting:', error);
+		}
+	}
 	let enableWikiLinks = $state($appConfig?.enable_wiki_links ?? true);
 	let languageToolEnabled = $state($appConfig?.languagetool_enabled ?? false);
 	let languageToolUrl = $state($appConfig?.languagetool_url ?? '');
@@ -1700,6 +1713,28 @@
 									</button>
 								</label>
 								{/if}
+								<label class="setting-toggle">
+									<span class="setting-label">
+										<span class="setting-name">{$ui("settings.reminderNotifications")}</span>
+										<span class="setting-desc">{$ui("settings.reminderNotificationsDesc")}</span>
+									</span>
+									<button class="toggle-switch" class:on={reminderNotifications} role="switch" aria-checked={reminderNotifications} aria-label={$ui("settings.reminderNotifications")} onclick={toggleReminderNotifications}>
+										<span class="toggle-knob"></span>
+									</button>
+								</label>
+							</div>
+						{:else if isAndroid}
+							<div class="settings-section">
+								<h3>{$ui("reminders.channel")}</h3>
+								<label class="setting-toggle">
+									<span class="setting-label">
+										<span class="setting-name">{$ui("settings.reminderNotifications")}</span>
+										<span class="setting-desc">{$ui("settings.reminderNotificationsDescAndroid")}</span>
+									</span>
+									<button class="toggle-switch" class:on={reminderNotifications} role="switch" aria-checked={reminderNotifications} aria-label={$ui("settings.reminderNotifications")} onclick={toggleReminderNotifications}>
+										<span class="toggle-knob"></span>
+									</button>
+								</label>
 							</div>
 						{/if}
 						</div>

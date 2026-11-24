@@ -9,13 +9,14 @@
 	import type { TaskItem, FileEvent } from '$lib/types';
 	import { isCurrentVaultEvent } from '$lib/utils/note-list-updates';
 	import { formatLocalDate } from '$lib/utils/time';
-	import { matchesTaskDueFilter, type TaskDueFilter } from '$lib/utils/task-filter';
+	import { matchesTaskDueFilter, formatLocalTime, taskDueKey, isTaskOverdue, matchesTaskTag, collectTaskTags, composeDue, type TaskDueFilter } from '$lib/utils/task-filter';
 
-	let { onOpenTask = (_t: TaskItem) => {}, onToggleTask = async (_t: TaskItem) => {}, onSetTaskPriority = async (_t: TaskItem, _p: string | null) => {}, onSetTaskDue = async (_t: TaskItem, _d: string | null) => {} }: {
+	let { onOpenTask = (_t: TaskItem) => {}, onToggleTask = async (_t: TaskItem) => {}, onSetTaskPriority = async (_t: TaskItem, _p: string | null) => {}, onSetTaskDue = async (_t: TaskItem, _d: string | null) => {}, onSetTaskRemind = async (_t: TaskItem, _r: string | null) => {} }: {
 		onOpenTask?: (t: TaskItem) => void;
 		onToggleTask?: (t: TaskItem) => Promise<void>;
 		onSetTaskPriority?: (t: TaskItem, p: string | null) => Promise<void>;
 		onSetTaskDue?: (t: TaskItem, d: string | null) => Promise<void>;
+		onSetTaskRemind?: (t: TaskItem, r: string | null) => Promise<void>;
 	} = $props();
 
 	let tasks = $state<TaskItem[]>([]);
@@ -98,9 +99,11 @@
 			dayTimer = setTimeout(refreshDay, nextDay.getTime() - now.getTime() + 1);
 		};
 		const resumeDay = () => {
-			if (document.visibilityState === 'visible') refreshDay();
+			if (document.visibilityState === 'visible') { refreshDay(); nowTime = formatLocalTime(new Date()); }
 		};
 		refreshDay();
+		// Due times make "overdue" change during the day.
+		const minuteTimer = setInterval(() => { nowTime = formatLocalTime(new Date()); }, 30_000);
 		document.addEventListener('visibilitychange', resumeDay);
 		listen<FileEvent>('file-changed', ({ payload }) => handleFileChange(payload)).then((u) => {
 			if (disposed) u();
@@ -111,12 +114,17 @@
 			fullLoad += 1;
 			unlisten?.();
 			clearTimeout(dayTimer);
+			clearInterval(minuteTimer);
 			document.removeEventListener('visibilitychange', resumeDay);
 		};
 	});
 
 	let today = $state(formatLocalDate(new Date()));
+	let nowTime = $state(formatLocalTime(new Date()));
 	let dueFilter = $state<TaskDueFilter>('all');
+	let tagFilter = $state('');
+	const allTags = $derived(collectTaskTags(tasks));
+	$effect(() => { if (tagFilter && !allTags.some(tag => tag.toLowerCase() === tagFilter.toLowerCase())) tagFilter = ''; });
 
 	const prioRank: Record<string, number> = { high: 0, med: 1, low: 2 };
 	function prank(p: string | null) { return p ? (prioRank[p] ?? 3) : 3; }
@@ -132,6 +140,7 @@
 		&& (!$tasksOnlyFlagged || !!t.due || !!t.priority)
 		&& matchesQuery(t)
 		&& matchesTaskDueFilter(t.due, dueFilter, today, t.completed)
+		&& matchesTaskTag(t.tags, tagFilter)
 	));
 
 	const filtered = $derived.by(() => {
@@ -145,8 +154,8 @@
 				const d = a.note_title.localeCompare(b.note_title);
 				if (d) return d;
 			} else {
-				const ad = a.due ?? '9999-99-99';
-				const bd = b.due ?? '9999-99-99';
+				const ad = taskDueKey(a.due, a.due_time ?? null);
+				const bd = taskDueKey(b.due, b.due_time ?? null);
 				if (ad !== bd) return ad < bd ? -1 : 1;
 			}
 			return a.text.localeCompare(b.text);
@@ -156,11 +165,21 @@
 
 	const openCount = $derived(tasks.filter((t) => !t.completed).length);
 
-	function dueClass(due: string | null, completed: boolean): string {
-		if (!due || completed) return '';
-		if (due < today) return 'overdue';
-		if (due === today) return 'duetoday';
+	function dueClass(t: TaskItem): string {
+		if (!t.due || t.completed) return '';
+		if (isTaskOverdue(t.due, t.due_time ?? null, t.completed, today, nowTime)) return 'overdue';
+		if (t.due === today) return 'duetoday';
 		return '';
+	}
+
+	function dueLabel(t: TaskItem): string {
+		return t.due ? (t.due_time ? `${t.due} ${t.due_time}` : t.due) : 'due';
+	}
+
+	function remindLabel(t: TaskItem): string {
+		if (!t.remind) return '';
+		const [date, time] = t.remind.split('T');
+		return date === t.due || date === today ? time : `${date} ${time}`;
 	}
 
 	async function toggle(t: TaskItem) {
@@ -170,6 +189,28 @@
 
 	let prioMenuFor = $state<string | null>(null);
 	let dueMenuFor = $state<string | null>(null);
+	let remindMenuFor = $state<string | null>(null);
+	let dueDraft = $state({ date: '', time: '' });
+	let remindDraft = $state('');
+
+	function openDueMenu(t: TaskItem) {
+		prioMenuFor = null; remindMenuFor = null;
+		dueDraft = { date: t.due ?? '', time: t.due_time ?? '' };
+		dueMenuFor = dueMenuFor === rowKey(t) ? null : rowKey(t);
+	}
+
+	function openRemindMenu(t: TaskItem) {
+		prioMenuFor = null; dueMenuFor = null;
+		// Default: the due time if there is one, else 09:00 on the due date or today.
+		remindDraft = t.remind ?? `${t.due ?? today}T${t.due_time ?? '09:00'}`;
+		remindMenuFor = remindMenuFor === rowKey(t) ? null : rowKey(t);
+	}
+
+	async function chooseRemind(t: TaskItem, r: string | null) {
+		remindMenuFor = null;
+		await onSetTaskRemind(t, r);
+		await loadNote(t.note_path);
+	}
 	const rowKey = (t: TaskItem) => t.note_path + ':' + t.line + ':' + t.raw_line;
 
 	async function choosePriority(t: TaskItem, p: string | null) {
@@ -261,15 +302,16 @@
 		draggedTask = null;
 		dragOverDate = null;
 		if (!t || t.due === date) return;
-		await onSetTaskDue(t, date);
+		// Moving to another day keeps the task's time.
+		await onSetTaskDue(t, composeDue(date, t.due_time ?? ''));
 		await loadNote(t.note_path);
 	}
 </script>
 
 <div class="tasks-view" class:mobile={isMobile}>
-	{#if prioMenuFor || dueMenuFor}
+	{#if prioMenuFor || dueMenuFor || remindMenuFor}
 		<!-- svelte-ignore a11y_consider_explicit_label -->
-		<button class="prio-backdrop" onclick={() => { prioMenuFor = null; dueMenuFor = null; }} aria-label={$ui("ui.close_menu")}></button>
+		<button class="prio-backdrop" onclick={() => { prioMenuFor = null; dueMenuFor = null; remindMenuFor = null; }} aria-label={$ui("ui.close_menu")}></button>
 	{/if}
 	<div class="tasks-controls">
 		<input class="tasks-filter" type="text" placeholder={$ui("ui.filter_tasks")} bind:value={taskQuery} onkeydown={(e) => { if (e.key === 'Escape') taskQuery = ''; }} aria-label={$ui("ui.filter_tasks_by_text")} />
@@ -277,6 +319,12 @@
 		<button class="tasks-ctl" class:active={dueFilter === 'overdue'} aria-pressed={dueFilter === 'overdue'} onclick={() => { dueFilter = dueFilter === 'overdue' ? 'all' : 'overdue'; }} title={$ui("ui.show_tasks_due_before_today")}>{$ui("ui.overdue")}</button>
 		<button class="tasks-ctl" class:active={$tasksHideCompleted} onclick={() => ($tasksHideCompleted = !$tasksHideCompleted)} title={$ui("ui.hide_completed_tasks")}>{$ui("ui.hide_done")}</button>
 		<button class="tasks-ctl" class:active={$tasksOnlyFlagged} onclick={() => ($tasksOnlyFlagged = !$tasksOnlyFlagged)} title={$ui("ui.only_show_tasks_with_a_due_date_or_priority")}>{$ui("ui.flagged")}</button>
+		{#if allTags.length}
+			<select class="tasks-ctl tasks-tag-filter" class:active={!!tagFilter} bind:value={tagFilter} aria-label={$ui("tasks.tagFilter")} title={$ui("tasks.tagFilter")}>
+				<option value="">{$ui("tasks.allTags")}</option>
+				{#each allTags as tag (tag)}<option value={tag}>#{tag}</option>{/each}
+			</select>
+		{/if}
 		{#if !isAndroid}
 			<div class="tasks-layout">
 				<button class="tasks-ctl" class:active={viewLayout === 'list'} onclick={() => ($tasksLayout = 'list')} title={$ui("ui.list_view")}>{$ui("ui.list")}</button>
@@ -313,7 +361,7 @@
 							class:set={!!t.priority}
 							title={$ui("ui.set_priority")}
 							aria-label={$ui("ui.set_priority")}
-							onclick={(e) => { e.stopPropagation(); dueMenuFor = null; prioMenuFor = prioMenuFor === rowKey(t) ? null : rowKey(t); }}
+							onclick={(e) => { e.stopPropagation(); dueMenuFor = null; remindMenuFor = null; prioMenuFor = prioMenuFor === rowKey(t) ? null : rowKey(t); }}
 						>{t.priority ?? '!'}</button>
 						{#if prioMenuFor === rowKey(t)}
 							<div class="prio-menu" role="menu">
@@ -327,22 +375,45 @@
 					<span class="task-label">{t.text}</span>
 					<span class="task-due-wrap">
 						<button
-							class="task-due {dueClass(t.due, t.completed)}"
+							class="task-due {dueClass(t)}"
 							class:set={!!t.due}
 							title={$ui("ui.set_due_date")}
 							aria-label={$ui("ui.set_due_date")}
-							onclick={(e) => { e.stopPropagation(); prioMenuFor = null; dueMenuFor = dueMenuFor === rowKey(t) ? null : rowKey(t); }}
-						>{t.due ?? 'due'}</button>
+							onclick={(e) => { e.stopPropagation(); openDueMenu(t); }}
+						>{dueLabel(t)}</button>
 						{#if dueMenuFor === rowKey(t)}
-							<div class="due-menu">
-								<input
-									class="due-input"
-									type="date"
-									value={t.due ?? ''}
-									onclick={(e) => e.stopPropagation()}
-									onchange={(e) => { e.stopPropagation(); chooseDue(t, (e.target as HTMLInputElement).value || null); }}
-								/>
-								{#if t.due}<button class="prio-opt prio-clear" onclick={(e) => { e.stopPropagation(); chooseDue(t, null); }}>{$ui("ui.clear")}</button>{/if}
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div class="due-menu" onclick={(e) => e.stopPropagation()}>
+								<input class="due-input" type="date" aria-label={$ui("ui.set_due_date")} bind:value={dueDraft.date} />
+								<input class="due-input" type="time" aria-label={$ui("tasks.dueTime")} title={$ui("tasks.dueTimeHint")} bind:value={dueDraft.time} />
+								<div class="due-actions">
+									<button class="prio-opt" disabled={!dueDraft.date} onclick={() => chooseDue(t, composeDue(dueDraft.date, dueDraft.time))}>{$ui("tasks.save")}</button>
+									{#if t.due}<button class="prio-opt prio-clear" onclick={() => chooseDue(t, null)}>{$ui("ui.clear")}</button>{/if}
+								</div>
+							</div>
+						{/if}
+					</span>
+					<span class="task-due-wrap">
+						<button
+							class="task-remind"
+							class:set={!!t.remind}
+							title={t.remind ? $ui("tasks.reminderAt", { time: t.remind.replace('T', ' ') }) : $ui("tasks.setReminder")}
+							aria-label={$ui("tasks.setReminder")}
+							onclick={(e) => { e.stopPropagation(); openRemindMenu(t); }}
+						>
+							<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+							{#if t.remind}<span>{remindLabel(t)}</span>{/if}
+						</button>
+						{#if remindMenuFor === rowKey(t)}
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div class="due-menu remind-menu" onclick={(e) => e.stopPropagation()}>
+								<input class="due-input" type="datetime-local" aria-label={$ui("tasks.setReminder")} bind:value={remindDraft} />
+								<div class="due-actions">
+									<button class="prio-opt" disabled={!remindDraft} onclick={() => chooseRemind(t, remindDraft.slice(0, 16))}>{$ui("tasks.save")}</button>
+									{#if t.remind}<button class="prio-opt prio-clear" onclick={() => chooseRemind(t, null)}>{$ui("ui.clear")}</button>{/if}
+								</div>
 							</div>
 						{/if}
 					</span>
@@ -690,6 +761,30 @@
 		color: var(--text-primary);
 		color-scheme: light dark;
 	}
+	.task-remind {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 11px;
+		padding: 1px 5px;
+		border-radius: 4px;
+		border: 1px solid transparent;
+		background: transparent;
+		color: var(--text-tertiary);
+		cursor: pointer;
+		font-family: inherit;
+		line-height: 1.5;
+		opacity: 0.6;
+	}
+	.task-row:hover .task-remind, .task-remind.set { opacity: 1; }
+	.task-remind.set {
+		color: var(--accent);
+		border-color: var(--border-color);
+		background: var(--bg-secondary);
+	}
+	.remind-menu { left: auto; right: 0; }
+	.due-actions { display: flex; gap: 4px; }
+	.tasks-tag-filter { max-width: 140px; }
 	.task-note {
 		font-size: 11px;
 		color: var(--text-tertiary);

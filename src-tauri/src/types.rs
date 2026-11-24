@@ -312,6 +312,8 @@ pub struct AppConfig {
     /// Where files outside the vault keep pasted images, relative to their project root.
     #[serde(default = "default_external_attachments_folder")]
     pub external_attachments_folder: String,
+    #[serde(default = "default_true")]
+    pub reminder_notifications: bool,
     #[serde(default)]
     pub languagetool_enabled: bool,
     /// Server base URL; `None` uses the public LanguageTool API.
@@ -472,6 +474,7 @@ impl Default for AppConfig {
             search_folders: Vec::new(),
             ask_image_name: true,
             external_attachments_folder: default_external_attachments_folder(),
+            reminder_notifications: true,
             languagetool_enabled: false,
             languagetool_url: None,
             languagetool_language: default_languagetool_language(),
@@ -690,7 +693,17 @@ pub struct TaskItem {
     pub raw_line: String,
     pub text: String,
     pub completed: bool,
+    /// Due date, `YYYY-MM-DD`.
     pub due: Option<String>,
+    /// Optional local due time, `HH:MM`.
+    #[serde(default)]
+    pub due_time: Option<String>,
+    /// Local reminder time, `YYYY-MM-DDTHH:MM`.
+    #[serde(default)]
+    pub remind: Option<String>,
+    /// Note frontmatter tags plus `#tags` in the task line.
+    #[serde(default)]
+    pub tags: Vec<String>,
     pub priority: Option<String>,
 }
 
