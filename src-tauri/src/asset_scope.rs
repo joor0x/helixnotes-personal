@@ -64,6 +64,7 @@ pub fn allow_opened_markdown<R: Runtime>(app: &AppHandle<R>, note_path: &Path) {
     if let Err(error) = allow_external_note_assets(app, note_path) {
         log::warn!("{error}");
     }
+    crate::external_assets::allow_project_assets(app, note_path);
 }
 
 /// Grants access to relative assets next to a Markdown file explicitly opened by the user.

@@ -684,6 +684,16 @@
 	async function selectNoteFromSearch(result: SearchResult, notebook: NotebookEntry | null, canSelect: () => boolean): Promise<boolean> {
 		const { path } = result;
 		const token = beginNavigation();
+		if (result.source) {
+			// Results from extra search folders open in place, like any external Markdown file.
+			const opened = await openExternalMarkdown(path);
+			if (!navigationIsCurrent(token) || !canSelect() || !(await handleOpenFile(opened, token))) return false;
+			if (isMobile) $mobileView = 'editor';
+			await tick();
+			if (!navigationIsCurrent(token) || !canSelect()) return false;
+			await editor?.revealSearchTarget(result.match_target, () => navigationIsCurrent(token) && canSelect());
+			return navigationIsCurrent(token) && canSelect();
+		}
 		if (!(await selectNoteFromSwitcher(path, token, canSelect)) || !navigationIsCurrent(token) || !canSelect()) return false;
 		const mode = notebook ? 'notebook' : 'all';
 		if ($viewMode !== mode || $activeNotebook?.path !== notebook?.path || $activeTag !== null) {

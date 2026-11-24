@@ -134,12 +134,15 @@
 		}
 	}
 
-	function getNotebook(path: string): string {
-		if (!currentVault) return '';
-		const rel = relativePath(currentVault, path);
+	function getNotebook(path: string, source?: string | null): string {
+		const root = source ?? currentVault;
+		if (!root) return '';
+		const rel = relativePath(root, path);
 		const lastSlash = rel.lastIndexOf('/');
 		return lastSlash > 0 ? rel.substring(0, lastSlash) : '';
 	}
+
+	const sourceName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
 
 	function textParts(text: string, matches: SearchMatch[]) {
 		const parts: { text: string; matched: boolean }[] = [];
@@ -173,7 +176,7 @@
 		try {
 			const normalized = result.path.replace(/\\/g, '/');
 			const parentDir = normalized.slice(0, normalized.lastIndexOf('/'));
-			const notebook = parentDir ? findNotebookByPath($notebooks, parentDir) : null;
+			const notebook = parentDir && !result.source ? findNotebookByPath($notebooks, parentDir) : null;
 			const opened = await onSelectNote(result, notebook, () => isCurrent(generation, vault));
 			if (!isCurrent(generation, vault)) return;
 			if (!opened) {
@@ -253,7 +256,9 @@
 									<line x1="16" y1="17" x2="8" y2="17" />
 								</svg>
 								<span class="result-title">{#each row.title as part}{#if part.matched}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</span>
-								{#if getNotebook(result.path)}
+								{#if result.source}
+									<span class="result-source" title={result.source}>{sourceName(result.source)}{#if getNotebook(result.path, result.source)}<span class="result-source-sub">/{getNotebook(result.path, result.source)}</span>{/if}</span>
+								{:else if getNotebook(result.path)}
 									<span class="result-notebook">{getNotebook(result.path)}</span>
 								{/if}
 							</div>
@@ -421,6 +426,24 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.result-source {
+		margin-left: auto;
+		font-size: 11px;
+		color: var(--accent);
+		border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+		padding: 0 7px;
+		border-radius: 4px;
+		flex-shrink: 0;
+		max-width: 220px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.result-source-sub {
+		color: var(--text-tertiary);
 	}
 
 	.result-notebook {

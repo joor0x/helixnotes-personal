@@ -42,7 +42,7 @@
 	import { openFile, openUrl, copyFileTo, copyImageToClipboard as copyImageToClipboardCmd, writeBytesTo, copyPngToClipboard, copyTextToClipboard } from '$lib/api';
 	import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 	import { activeNote, activeNotePath, appConfig, editorDirty, sourceMode, livePreviewMode, focusMode, readOnly, quickAccessPaths, notes, navHistory, canGoBack, canGoForward, viewerNote, viewMode, notebooks, outlineWidth } from '$lib/stores/app';
-	import { saveNote, saveExternalNote, importNote, createNote, saveImage, saveAttachment, readClipboardImage, readClipboardContents, addQuickAccess, removeQuickAccess, getQuickAccess, getNoteVersions, getNoteVersionContent, createVersion, aiAsk, getAllNoteTitles, readNote, renameNote, setToolbarLayout } from '$lib/api';
+	import { saveNote, saveExternalNote, importNote, createNote, saveImage, saveAttachment, saveExternalAttachment, readClipboardImage, readClipboardContents, addQuickAccess, removeQuickAccess, getQuickAccess, getNoteVersions, getNoteVersionContent, createVersion, aiAsk, getAllNoteTitles, readNote, renameNote, setToolbarLayout } from '$lib/api';
 	import type { NoteContent, VersionEntry, AiStreamEvent, NoteTitleEntry, TaskItem as TaskRecord, FileEvent, SearchTarget, ToolbarLayout } from '$lib/types';
 	import { listen } from '@tauri-apps/api/event';
 	import { debounce } from '$lib/utils/debounce';
@@ -58,6 +58,7 @@
 	import { WrapSelectedText } from '$lib/editor/extensions/wrapSelectedText';
 	import { CodeBlockInputScroll } from '$lib/editor/extensions/codeBlockInputScroll';
 	import { ImageGrid } from '$lib/editor/extensions/imageGrid';
+	import { ImageCaptions } from '$lib/editor/extensions/imageCaptions';
 	import { defaultGridCols, expandImageRange, reorderTarget, serializeImgGrid } from '$lib/editor/imageGrid';
 	import { calloutGroup, calloutIcon, calloutLabel, CALLOUT_MENU, transformCalloutBlockquotes, serializeCallout } from '$lib/editor/callouts';
 	import SourceEditor from './SourceEditor.svelte';
@@ -770,6 +771,13 @@
 	let textContextMenu = $state<{ x: number; y: number; submenuLeft: boolean } | null>(null);
 	let tableContextMenu = $state<{ x: number; y: number; hasStyling: boolean } | null>(null);
 	let imageToolbar = $state<{ pos: number; x: number; y: number; size: string; src: string; alt: string; title: string; inGrid: boolean; canGroup: boolean } | null>(null);
+	/** Screen rectangle of the toolbar's image, for the corner resize handles (desktop, outside grids). */
+	let imageFrame = $state<{ left: number; top: number; width: number; height: number } | null>(null);
+	let imageResize = $state<{ width: number } | null>(null);
+	/** Where a dragged image will land: a line between two top-level blocks. */
+	let imageDrop = $state<{ left: number; top: number; width: number } | null>(null);
+	/** Pending "name this image" prompt shown before a pasted or dropped image is saved. */
+	let imageNameModal = $state<{ stem: string; ext: string; fallback: string; resolve: (name: string | null) => void } | null>(null);
 	let imageTitleModal = $state<{ title: string } | null>(null);
 	let imageViewer = $state<{ src: string; alt: string } | null>(null);
 	let copyToast = $state<'copying' | 'done' | null>(null);
@@ -3599,7 +3607,7 @@
 	}
 
 	function canInsert(origin: EditorOrigin): boolean {
-		return !externalOperationBusy && !pathMigrationPending && isOriginCurrent(origin) && !!origin.vault && !trashPreview && !$readOnly && !$viewerNote;
+		return !externalOperationBusy && !pathMigrationPending && isOriginCurrent(origin) && !!origin.vault && !trashPreview && !$readOnly && !viewerLocked();
 	}
 
 	export function markEdited(): void {
@@ -5672,6 +5680,7 @@
 				CustomTableHeader,
 				Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link' }, isAllowedUri: (url, ctx) => ctx.defaultValidate(url) || !url.startsWith('javascript:'), shouldAutoLink: (url) => /^https?:\/\//.test(url) }),
 				CustomImage.configure({ inline: true, HTMLAttributes: { class: 'editor-image', crossorigin: 'anonymous' } }),
+				ImageCaptions,
 				Highlight.configure({ multicolor: true }),
 				Typography,
 				Underline,
@@ -6192,9 +6201,157 @@
 	function setImageSize(size: string) {
 		if (!editor || !imageToolbar) return;
 		const { pos } = imageToolbar;
-		const tr = editor.state.tr.setNodeAttribute(pos, 'size', size);
+		// A preset replaces a width set by dragging; one step to undo.
+		const tr = editor.state.tr.setNodeAttribute(pos, 'size', size).setNodeAttribute(pos, 'width', null).setNodeAttribute(pos, 'height', null);
 		editor.view.dispatch(tr);
 		if (imageToolbar) imageToolbar = { ...imageToolbar, size };
+	}
+
+	function toolbarImageElement(): HTMLImageElement | null {
+		if (!editor || !imageToolbar) return null;
+		const dom = editor.view.nodeDOM(imageToolbar.pos);
+		return dom instanceof HTMLImageElement ? dom : (dom as HTMLElement | null)?.querySelector?.('img') ?? null;
+	}
+
+	function measureImageFrame() {
+		const img = !isMobile && imageToolbar && !imageToolbar.inGrid ? toolbarImageElement() : null;
+		if (!img) { imageFrame = null; return; }
+		const rect = img.getBoundingClientRect();
+		imageFrame = rect.width > 0 ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null;
+	}
+
+	$effect(() => {
+		// Re-measure whenever the toolbar opens, moves to another image or changes its size.
+		const toolbar = imageToolbar;
+		if (!toolbar) { imageFrame = null; return; }
+		void toolbar.size;
+		let frame = requestAnimationFrame(measureImageFrame);
+		const onResize = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measureImageFrame); };
+		window.addEventListener('resize', onResize);
+		return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', onResize); };
+	});
+
+	/** Drag a corner: the width follows the pointer (keeping the ratio) and is saved once on release. */
+	function startImageResize(event: PointerEvent, corner: 'nw' | 'ne' | 'sw' | 'se') {
+		if (event.button !== 0 || !editor || !imageToolbar || $readOnly) return;
+		const img = toolbarImageElement();
+		if (!img) return;
+		event.preventDefault();
+		event.stopPropagation();
+		const handle = event.currentTarget as HTMLElement;
+		handle.setPointerCapture(event.pointerId);
+		const { pos, src } = imageToolbar;
+		const startX = event.clientX;
+		const startWidth = img.getBoundingClientRect().width;
+		const maxWidth = Math.max(40, (img.parentElement ?? editor.view.dom).clientWidth);
+		const direction = corner.endsWith('e') ? 1 : -1;
+		const previous = { width: img.style.width, maxWidth: img.style.maxWidth };
+		let width = Math.round(startWidth);
+		imageResize = { width };
+		const move = (e: PointerEvent) => {
+			width = Math.round(Math.min(maxWidth, Math.max(40, startWidth + (e.clientX - startX) * direction)));
+			img.style.maxWidth = '100%';
+			img.style.width = `${width}px`;
+			imageResize = { width };
+			measureImageFrame();
+		};
+		const finish = (e: PointerEvent) => {
+			handle.removeEventListener('pointermove', move);
+			handle.removeEventListener('pointerup', finish);
+			handle.removeEventListener('pointercancel', finish);
+			if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId);
+			img.style.width = previous.width;
+			img.style.maxWidth = previous.maxWidth;
+			imageResize = null;
+			const node = editor?.state.doc.nodeAt(pos);
+			if (!editor || node?.type.name !== 'image' || node.attrs.src !== src) { imageToolbar = null; return; }
+			const changed = Math.abs(width - startWidth) >= 1 && e.type === 'pointerup';
+			if (changed) {
+				// Full width at the editor's width keeps the note responsive instead of pinning pixels.
+				const fullWidth = width >= maxWidth - 1;
+				const tr = editor.state.tr
+					.setNodeAttribute(pos, 'width', fullWidth ? null : String(width))
+					.setNodeAttribute(pos, 'height', null)
+					.setNodeAttribute(pos, 'size', 'full');
+				editor.view.dispatch(tr);
+				if (imageToolbar) imageToolbar = { ...imageToolbar, size: 'full' };
+			}
+			requestAnimationFrame(measureImageFrame);
+		};
+		handle.addEventListener('pointermove', move);
+		handle.addEventListener('pointerup', finish);
+		handle.addEventListener('pointercancel', finish);
+	}
+
+	/** The top-level block boundary nearest to `clientY`, and where to draw the drop line. */
+	function imageDropTarget(clientY: number): { pos: number; top: number } | null {
+		if (!editor) return null;
+		const view = editor.view;
+		let best: { pos: number; top: number; distance: number } | null = null;
+		view.state.doc.forEach((node, offset) => {
+			const dom = view.nodeDOM(offset);
+			if (!(dom instanceof HTMLElement)) return;
+			const rect = dom.getBoundingClientRect();
+			if (rect.height === 0) return;
+			const before = clientY < rect.top + rect.height / 2;
+			const distance = clientY >= rect.top && clientY <= rect.bottom ? 0 : Math.min(Math.abs(clientY - rect.top), Math.abs(clientY - rect.bottom));
+			if (!best || distance < best.distance) {
+				best = { pos: before ? offset : offset + node.nodeSize, top: before ? rect.top : rect.bottom, distance };
+			}
+		});
+		return best;
+	}
+
+	/** Drag the selected image to another place between blocks; one step to undo. */
+	function startImageMove(event: PointerEvent) {
+		if (event.button !== 0 || !editor || !imageToolbar || $readOnly) return;
+		if ((event.target as HTMLElement).classList.contains('img-resize-handle')) return;
+		event.preventDefault();
+		event.stopPropagation();
+		const frame = event.currentTarget as HTMLElement;
+		frame.setPointerCapture(event.pointerId);
+		const { pos, src } = imageToolbar;
+		const startX = event.clientX, startY = event.clientY;
+		let moving = false;
+		let target: { pos: number; top: number } | null = null;
+		const move = (e: PointerEvent) => {
+			if (!moving && Math.hypot(e.clientX - startX, e.clientY - startY) < 6) return;
+			moving = true;
+			target = imageDropTarget(e.clientY);
+			const bounds = editor?.view.dom.getBoundingClientRect();
+			imageDrop = target && bounds ? { left: bounds.left, top: target.top, width: bounds.width } : null;
+		};
+		const finish = (e: PointerEvent) => {
+			frame.removeEventListener('pointermove', move);
+			frame.removeEventListener('pointerup', finish);
+			frame.removeEventListener('pointercancel', finish);
+			if (frame.hasPointerCapture(e.pointerId)) frame.releasePointerCapture(e.pointerId);
+			imageDrop = null;
+			if (!moving) { imageToolbar = null; return; } // A plain click on the image closes its toolbar.
+			if (e.type === 'pointerup' && target) moveImageTo(pos, src, target.pos);
+			imageToolbar = null;
+		};
+		frame.addEventListener('pointermove', move);
+		frame.addEventListener('pointerup', finish);
+		frame.addEventListener('pointercancel', finish);
+	}
+
+	function moveImageTo(pos: number, src: string, target: number) {
+		if (!editor) return;
+		const { state } = editor;
+		const node = state.doc.nodeAt(pos);
+		if (node?.type.name !== 'image' || node.attrs.src !== src) return;
+		const resolved = state.doc.resolve(pos);
+		// An image alone in a top-level paragraph moves with its paragraph; inline ones leave the text.
+		const alone = resolved.depth === 1 && resolved.parent.type.name === 'paragraph' && resolved.parent.childCount === 1;
+		if (alone && (target === resolved.before() || target === resolved.after())) return;
+		const tr = state.tr;
+		if (alone) tr.delete(resolved.before(), resolved.after());
+		else tr.delete(pos, pos + node.nodeSize);
+		const at = tr.mapping.map(target);
+		tr.insert(at, state.schema.nodes.paragraph.create(null, node));
+		tr.setSelection(TextSelection.near(tr.doc.resolve(at + 1 + node.nodeSize)));
+		editor.view.dispatch(tr.scrollIntoView());
 	}
 
 	function openImageTitleModal() {
@@ -7334,7 +7491,16 @@
 
 	async function uploadAsset(origin: EditorOrigin, name: string, data: number[], kind: AssetKind) {
 		if (!canInsert(origin)) return;
-		const relativePath = kind === 'image'
+		if (kind === 'image' && ($appConfig?.ask_image_name ?? true)) {
+			const chosen = await askImageName(name);
+			if (chosen === null || !canInsert(origin)) return;
+			name = chosen;
+		}
+		// A file outside the vault keeps its attachments in its own project, linked relatively.
+		const external = !!get(viewerNote);
+		const relativePath = external
+			? await saveExternalAttachment(origin.path!, name, data)
+			: kind === 'image'
 			? await saveImage(origin.vault!, name, data)
 			: await saveAttachment(origin.vault!, name, data);
 		if (!canInsert(origin)) return;
@@ -7347,7 +7513,7 @@
 			source.replace(`${kind === 'image' ? '!' : ''}[${escaped}](${destination}) `, from, to);
 		} else if (editor) {
 			// Async completion may insert into its origin, but must never take focus.
-			if (kind === 'image') editor.commands.setImage({ src: resolveImageSrc(destination) });
+			if (kind === 'image') editor.commands.setImage({ src: resolveImageSrc(destination), alt: name.replace(/\.[^.]+$/, '') });
 			else if (kind === 'pdf' && !isMobile && $appConfig?.pdf_preview) {
 				editor.commands.insertContent({ type: 'pdfEmbed', attrs: { src: destination, name } });
 			} else {
@@ -7357,6 +7523,41 @@
 				]);
 			}
 		}
+	}
+
+	/** Default stem for an image: its own name, or a timestamp for generic clipboard names. */
+	function suggestedImageName(name: string): { stem: string; ext: string } {
+		const dot = name.lastIndexOf('.');
+		const ext = dot > 0 ? name.slice(dot) : '.png';
+		const stem = dot > 0 ? name.slice(0, dot) : name;
+		if (stem && !/^(pasted-image|image|imagen|screenshot|clipboard)$/i.test(stem)) return { stem, ext };
+		const now = new Date();
+		const two = (value: number) => String(value).padStart(2, '0');
+		return { stem: `image-${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`, ext };
+	}
+
+	// Several images dropped at once are named one after another.
+	let imageNameQueue: Promise<unknown> = Promise.resolve();
+
+	/** Asks for the image's file name; null cancels the insertion. */
+	function askImageName(name: string): Promise<string | null> {
+		const { stem, ext } = suggestedImageName(name);
+		const asked = imageNameQueue.then(() => editorDisposed ? null : new Promise<string | null>((resolve) => {
+			imageNameModal = { stem, ext, fallback: stem, resolve };
+		}));
+		imageNameQueue = asked;
+		return asked;
+	}
+
+	function finishImageNameModal(confirmed: boolean) {
+		const modal = imageNameModal;
+		if (!modal) return;
+		imageNameModal = null;
+		if (!confirmed) { modal.resolve(null); editor?.commands.focus(); return; }
+		let stem = modal.stem.trim().replace(/[\\/:*?"<>|]/g, '-');
+		if (stem.toLowerCase().endsWith(modal.ext.toLowerCase())) stem = stem.slice(0, -modal.ext.length);
+		modal.resolve(`${stem || modal.fallback}${modal.ext}`);
+		editor?.commands.focus();
 	}
 
 	async function insertFile(file: File, origin = captureOrigin()) {
@@ -7714,6 +7915,8 @@
 	}, mcpEditorReady);
 
 	onDestroy(() => {
+		imageNameModal?.resolve(null);
+		imageNameModal = null;
 		unregisterMcpEditor();
 		cancelProgressiveLoad();
 		void flushSave();
@@ -9076,11 +9279,23 @@
 {#if imageToolbar}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="img-toolbar-overlay" onclick={(e) => closeFromOverlay(e, () => (imageToolbar = null))} onkeydown={(e) => closeOnEscape(e, () => (imageToolbar = null))}>
+		{#if imageFrame && !$readOnly}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="img-resize-frame" class:moving={!!imageDrop} style="left: {imageFrame.left}px; top: {imageFrame.top}px; width: {imageFrame.width}px; height: {imageFrame.height}px" title={$ui("image.dragToMove")} onpointerdown={startImageMove}>
+				{#each ['nw', 'ne', 'sw', 'se'] as const as corner}
+					<span class="img-resize-handle {corner}" role="presentation" onpointerdown={(e) => startImageResize(e, corner)}></span>
+				{/each}
+				{#if imageResize}<span class="img-resize-label">{`${imageResize.width} px`}</span>{/if}
+			</div>
+		{/if}
+		{#if imageDrop}
+			<div class="img-drop-line" style="left: {imageDrop.left}px; top: {imageDrop.top}px; width: {imageDrop.width}px"></div>
+		{/if}
 		<div class="img-toolbar" class:mobile-viewer-toolbar={isAndroid} style="left: {imageToolbar.x}px; top: {imageToolbar.y}px">
 			<button class:active={imageToolbar.size === 'small'} onclick={() => setImageSize('small')} title={$ui("ui.small_33")}>S</button>
 			<button class:active={imageToolbar.size === 'medium'} onclick={() => setImageSize('medium')} title={$ui("ui.medium_50")}>M</button>
 			<button class:active={imageToolbar.size === 'full'} onclick={() => setImageSize('full')} title={$ui("ui.full_width")}>L</button>
-			<button class:active={!!imageToolbar.title} onclick={openImageTitleModal} title={imageToolbar.title ? $ui("ui.hover_text", { value0: imageToolbar.title }) : $ui("ui.set_hover_text")} aria-label={$ui("ui.image_hover_text")}>T</button>
+			<button class:active={!!imageToolbar.title} onclick={openImageTitleModal} title={imageToolbar.title ? $ui("image.captionValue", { value0: imageToolbar.title }) : $ui("image.setCaption")} aria-label={$ui("image.caption")}>T</button>
 			<span class="img-toolbar-sep"></span>
 			{#if imageToolbar.inGrid}
 				<button onclick={() => moveGridImage(-1)} title={$ui("ui.move_left_in_grid")} aria-label={$ui("ui.move_left_in_grid")}>←</button>
@@ -9111,19 +9326,55 @@
 	<ImageViewer src={imageViewer.src} alt={imageViewer.alt} onclose={() => (imageViewer = null)} />
 {/if}
 
+{#if imageNameModal}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="math-modal-overlay" onclick={(e) => closeFromOverlay(e, () => finishImageNameModal(false))} onkeydown={(e) => closeOnEscape(e, () => finishImageNameModal(false))}>
+		<div class="math-modal" role="dialog" aria-modal="true" aria-label={$ui("image.nameTitle")} tabindex="-1">
+			<div class="math-modal-header">
+				<span>{$ui("image.nameTitle")}</span>
+				<button type="button" class="math-modal-close" onclick={() => finishImageNameModal(false)} aria-label={$ui("ui.close")}>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+				</button>
+			</div>
+			<div class="img-name-row">
+				<input
+					class="math-modal-input img-title-input"
+					bind:value={imageNameModal.stem}
+					aria-label={$ui("image.nameTitle")}
+					onkeydown={(e) => {
+						if (e.isComposing) return;
+						if (e.key === 'Enter') { e.preventDefault(); finishImageNameModal(true); }
+						if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finishImageNameModal(false); }
+					}}
+					onfocus={(e) => e.currentTarget.select()}
+					use:autofocus
+				/>
+				<span class="img-name-ext">{imageNameModal.ext}</span>
+			</div>
+			<div class="math-modal-footer">
+				<span class="math-modal-hint">{$ui("image.nameHint")}</span>
+				<div class="math-modal-actions">
+					<button type="button" onclick={() => finishImageNameModal(false)}>{$ui("ui.cancel")}</button>
+					<button type="button" class="primary" onclick={() => finishImageNameModal(true)}>{$ui("image.nameSave")}</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
 {#if imageTitleModal}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="math-modal-overlay" onclick={(e) => closeFromOverlay(e, cancelImageTitleModal)} onkeydown={(e) => closeOnEscape(e, cancelImageTitleModal)}>
-		<div class="math-modal" role="dialog" aria-modal="true" aria-label={$ui("ui.image_hover_text")} tabindex="-1">
+		<div class="math-modal" role="dialog" aria-modal="true" aria-label={$ui("image.caption")} tabindex="-1">
 			<div class="math-modal-header">
-				<span>{$ui("ui.image_hover_text")}</span>
+				<span>{$ui("image.caption")}</span>
 				<button type="button" class="math-modal-close" onclick={cancelImageTitleModal} aria-label={$ui("ui.close")}>
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
 				</button>
 			</div>
 			<input
 				class="math-modal-input img-title-input"
-				placeholder={$ui("ui.shown_when_hovering_the_image_leave_empty_to_remove_it")}
+				placeholder={$ui("image.captionPlaceholder")}
 				bind:value={imageTitleModal.title}
 				onkeydown={(e) => {
 					if (e.key === 'Enter') { e.preventDefault(); commitImageTitleModal(); }
@@ -9132,7 +9383,7 @@
 				use:autofocus
 			/>
 			<div class="math-modal-footer">
-				<span class="math-modal-hint">{$ui("ui.saved_as_alt_image_hover_text_enter_to_apply_esc_to_cancel")}</span>
+				<span class="math-modal-hint">{$ui("image.captionHint")}</span>
 				<div class="math-modal-actions">
 					<button type="button" onclick={cancelImageTitleModal}>{$ui("ui.cancel")}</button>
 					<button type="button" class="primary" onclick={commitImageTitleModal}>{$ui("ui.apply")}</button>
@@ -12109,6 +12360,79 @@
 		position: fixed;
 		inset: 0;
 		z-index: 1500;
+	}
+
+	.img-resize-frame {
+		position: fixed;
+		box-sizing: border-box;
+		border: 2px solid var(--accent);
+		border-radius: 8px;
+		cursor: grab;
+		touch-action: none;
+	}
+	.img-resize-frame.moving {
+		cursor: grabbing;
+		opacity: 0.6;
+	}
+
+	.img-drop-line {
+		position: fixed;
+		height: 3px;
+		margin-top: -2px;
+		border-radius: 2px;
+		background: var(--accent);
+		pointer-events: none;
+	}
+
+	.img-name-row {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.img-name-row .img-title-input {
+		flex: 1;
+		min-width: 0;
+	}
+	.img-name-ext {
+		color: var(--text-tertiary);
+		font-size: 13px;
+	}
+
+	:global(.tiptap-wrapper .tiptap .image-caption) {
+		display: block;
+		margin: -0.5em 0 1em;
+		text-align: center;
+		font-size: 0.85em;
+		font-style: italic;
+		color: var(--text-tertiary);
+		user-select: none;
+	}
+
+	.img-resize-handle {
+		position: absolute;
+		width: 12px;
+		height: 12px;
+		box-sizing: border-box;
+		background: var(--bg-primary);
+		border: 2px solid var(--accent);
+		border-radius: 3px;
+		pointer-events: auto;
+		touch-action: none;
+	}
+	.img-resize-handle.nw { left: -7px; top: -7px; cursor: nwse-resize; }
+	.img-resize-handle.ne { right: -7px; top: -7px; cursor: nesw-resize; }
+	.img-resize-handle.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+	.img-resize-handle.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+
+	.img-resize-label {
+		position: absolute;
+		right: 6px;
+		bottom: 6px;
+		padding: 1px 6px;
+		border-radius: 4px;
+		font-size: 11px;
+		background: rgba(0, 0, 0, 0.65);
+		color: #fff;
 	}
 
 	.img-toolbar {

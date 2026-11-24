@@ -162,6 +162,10 @@ pub struct ToolbarLayout {
 
 /// Keeps the entries of a list that still parse and drops the rest, so one damaged entry (a custom
 /// theme missing a color, say) does not make the whole configuration unreadable.
+fn default_external_attachments_folder() -> String {
+    crate::external_assets::DEFAULT_FOLDER.to_string()
+}
+
 fn lenient_list<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -299,6 +303,15 @@ pub struct AppConfig {
     /// Remembered model per CLI provider; empty means the CLI's own default.
     #[serde(default)]
     pub ai_cli_models: std::collections::BTreeMap<String, String>,
+    /// Folders outside the vault that global search also indexes (desktop only).
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub search_folders: Vec<String>,
+    /// Ask for a file name before saving a pasted or dropped image.
+    #[serde(default = "default_true")]
+    pub ask_image_name: bool,
+    /// Where files outside the vault keep pasted images, relative to their project root.
+    #[serde(default = "default_external_attachments_folder")]
+    pub external_attachments_folder: String,
     #[serde(default)]
     pub languagetool_enabled: bool,
     /// Server base URL; `None` uses the public LanguageTool API.
@@ -456,6 +469,9 @@ impl Default for AppConfig {
             openai_compatible_model: None,
             ai_cli_paths: Default::default(),
             ai_cli_models: Default::default(),
+            search_folders: Vec::new(),
+            ask_image_name: true,
+            external_attachments_folder: default_external_attachments_folder(),
             languagetool_enabled: false,
             languagetool_url: None,
             languagetool_language: default_languagetool_language(),
@@ -579,6 +595,9 @@ pub struct SearchResult {
     pub title_matches: Vec<SearchMatch>,
     pub snippet_matches: Vec<SearchMatch>,
     pub match_target: Option<SearchTarget>,
+    /// The extra search folder this result comes from; `None` for the vault.
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

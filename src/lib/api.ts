@@ -649,6 +649,24 @@ export async function setAiSettings(
 
 // ── LanguageTool ──
 
+/** Saves an image or file for a Markdown file outside the vault; returns its link relative to that file. */
+export async function saveExternalAttachment(notePath: string, name: string, data: number[]): Promise<string> {
+  return invoke("save_external_attachment", { notePath, name, data });
+}
+
+export async function setAttachmentSettings(askImageName: boolean, externalAttachmentsFolder: string): Promise<void> {
+  return invoke("set_attachment_settings", { askImageName, externalAttachmentsFolder });
+}
+
+/** Adds a folder picked in the folder dialog to global search; returns the new list. */
+export async function addSearchFolder(path: string): Promise<string[]> {
+  return invoke("add_search_folder", { path });
+}
+
+export async function removeSearchFolder(path: string): Promise<string[]> {
+  return invoke("remove_search_folder", { path });
+}
+
 export async function setLanguageToolSettings(enabled: boolean, url: string | null, language: string): Promise<void> {
   return invoke("set_languagetool_settings", { enabled, url, language });
 }

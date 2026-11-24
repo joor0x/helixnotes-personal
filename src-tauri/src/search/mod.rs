@@ -828,6 +828,20 @@ impl SearchIndex {
         limit: usize,
         offset: usize,
     ) -> Result<SearchPage, String> {
+        self.search_window(query_str, limit.clamp(1, MAX_PAGE_SIZE), offset)
+    }
+
+    /// The best `count` results, for merging several indexes into one page.
+    pub fn search_top(&self, query_str: &str, count: usize) -> Result<SearchPage, String> {
+        self.search_window(query_str, count.max(1), 0)
+    }
+
+    fn search_window(
+        &self,
+        query_str: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<SearchPage, String> {
         let mut analyzer = self
             .index
             .tokenizers()
@@ -917,7 +931,7 @@ impl SearchIndex {
                 total: searcher.search(&query, &Count).map_err(|e| e.to_string())?,
             });
         }
-        let limit = limit.clamp(1, MAX_PAGE_SIZE).min(doc_count - offset);
+        let limit = limit.min(doc_count - offset);
         let segment_order: HashMap<_, _> = searcher
             .segment_readers()
             .iter()
@@ -973,6 +987,7 @@ impl SearchIndex {
                 title_matches,
                 snippet_matches,
                 match_target,
+                source: None,
             });
         }
         Ok(SearchPage { results, total })

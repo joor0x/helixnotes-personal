@@ -163,6 +163,12 @@ export interface AppConfig {
   openai_compatible_model?: string | null;
   ai_cli_paths?: Record<string, string>;
   ai_cli_models?: Record<string, string>;
+  /** Folders outside the vault that global search also covers. */
+  search_folders?: string[];
+  /** Ask for a file name before saving a pasted or dropped image. */
+  ask_image_name?: boolean;
+  /** Attachments folder for files outside the vault, relative to their project root. */
+  external_attachments_folder?: string;
   languagetool_enabled?: boolean;
   languagetool_url?: string | null;
   languagetool_language?: string;
@@ -230,6 +236,8 @@ export interface SearchResult {
   title_matches: SearchMatch[];
   snippet_matches: SearchMatch[];
   match_target: SearchTarget | null;
+  /** Extra search folder the result comes from; null for the vault. */
+  source?: string | null;
 }
 
 export interface SearchPage {

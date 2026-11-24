@@ -2167,7 +2167,8 @@ pub async fn set_task_due(
 // ── Search ──
 
 #[tauri::command]
-pub async fn search_notes(
+pub async fn search_notes<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     query: String,
     limit: Option<usize>,
@@ -2179,8 +2180,24 @@ pub async fn search_notes(
         .map_err(|error| error.to_string())?
         .clone()
         .ok_or("Search index not initialized")?;
+    let (vault_path, folders) = {
+        let config = state.config.lock().map_err(|error| error.to_string())?;
+        (config.active_vault.clone(), config.search_folders.clone())
+    };
+    let (limit, offset) = (limit.unwrap_or(20), offset.unwrap_or(0));
     tauri::async_runtime::spawn_blocking(move || {
-        search.search(&query, limit.unwrap_or(20), offset.unwrap_or(0))
+        if folders.is_empty() || cfg!(mobile) {
+            return search.search(&query, limit, offset);
+        }
+        crate::search_folders::search_all(
+            &app.state::<AppState>(),
+            search,
+            vault_path.as_deref(),
+            &folders,
+            &query,
+            limit,
+            offset,
+        )
     })
     .await
     .map_err(|error| error.to_string())?
@@ -3565,7 +3582,10 @@ fn path_is_in_active_vault<R: Runtime>(app: &AppHandle<R>, path: &Path) -> bool 
     canonical.is_some_and(|path| path.starts_with(vault))
 }
 
-fn ensure_scoped_path<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<(), String> {
+pub(crate) fn ensure_scoped_path<R: Runtime>(
+    app: &AppHandle<R>,
+    path: &Path,
+) -> Result<(), String> {
     if app.fs_scope().is_allowed(path) {
         Ok(())
     } else {

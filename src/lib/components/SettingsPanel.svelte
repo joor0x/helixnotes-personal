@@ -11,7 +11,7 @@
 	import AiModelPicker from './AiModelPicker.svelte';
 	import { AI_CLI_PROVIDERS, isCliProvider, cliProviderInfo } from '$lib/ai-cli';
 	import { showSettings, syncState, theme, resolvedTheme, appConfig, platformIsMobile, activeVaultConfig, updateAvailable as globalUpdateAvailable, updateObj as globalUpdateObj, installType, settingsTab, vaultReady, androidApkUrl, checkForUpdateMobile, notebookSortMode, isManagedInstall, customThemes } from '$lib/stores/app';
-	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setLanguageToolSettings, setSyncSettings, testSyncConnection, syncNow, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments } from '$lib/api';
+	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setLanguageToolSettings, addSearchFolder, removeSearchFolder, setAttachmentSettings, setSyncSettings, testSyncConnection, syncNow, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments } from '$lib/api';
 	import { darkThemes, isMobile, isAndroid } from '$lib/platform';
 	import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 	import { listen } from '@tauri-apps/api/event';
@@ -1024,6 +1024,44 @@
 		}
 	}
 
+	let askImageName = $state($appConfig?.ask_image_name ?? true);
+	let externalAttachmentsFolder = $state($appConfig?.external_attachments_folder ?? 'assets');
+	let attachmentMessage = $state<string | null>(null);
+	async function saveAttachmentSettings() {
+		const ask = askImageName, folder = externalAttachmentsFolder.trim() || 'assets';
+		try {
+			await setAttachmentSettings(ask, folder);
+			attachmentMessage = null;
+			externalAttachmentsFolder = folder;
+			appConfig.update(config => config ? { ...config, ask_image_name: ask, external_attachments_folder: folder } : config);
+		} catch (error) {
+			attachmentMessage = String(error);
+		}
+	}
+	let searchFolders = $state<string[]>($appConfig?.search_folders ?? []);
+	let searchFoldersMessage = $state<string | null>(null);
+	function applySearchFolders(folders: string[]) {
+		searchFolders = folders;
+		searchFoldersMessage = null;
+		appConfig.update(config => config ? { ...config, search_folders: folders } : config);
+	}
+	async function chooseSearchFolder() {
+		try {
+			const picked = await openDialog({ directory: true, multiple: false, recursive: true });
+			if (typeof picked === 'string') applySearchFolders(await addSearchFolder(picked));
+		} catch (error) {
+			searchFoldersMessage = String(error);
+		}
+	}
+	async function dropSearchFolder(folder: string) {
+		try {
+			applySearchFolders(await removeSearchFolder(folder));
+		} catch (error) {
+			searchFoldersMessage = String(error);
+		}
+	}
+	const folderName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
+
 	// Sidebar item visibility
 	let showAllNotes = $state($appConfig?.show_all_notes ?? true);
 	let showQuickAccess = $state($appConfig?.show_quick_access ?? true);
@@ -1574,6 +1612,33 @@
 								<DailyNoteTemplate vaultPath={$appConfig.active_vault} />
 							{/if}
 
+							{#if !isMobile}
+							<div class="settings-section">
+								<h3>{$ui("searchFolders.title")}</h3>
+								<p class="setting-hint">{$ui("searchFolders.hint")}</p>
+								{#if searchFolders.length}
+									<ul class="search-folder-list">
+										{#each searchFolders as folder (folder)}
+											<li>
+												<span class="search-folder-copy">
+													<span class="search-folder-name">{folderName(folder)}</span>
+													<span class="search-folder-path" title={folder}>{folder}</span>
+												</span>
+												<button class="search-folder-remove" onclick={() => dropSearchFolder(folder)} aria-label={$ui("searchFolders.remove", { value0: folderName(folder) })} title={$ui("searchFolders.remove", { value0: folderName(folder) })}>
+													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+								<button class="import-btn" onclick={chooseSearchFolder}>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+									{$ui("searchFolders.add")}
+								</button>
+								{#if searchFoldersMessage}<p class="setting-hint" role="alert" style="color: var(--text-danger, #ef4444);">{searchFoldersMessage}</p>{/if}
+							</div>
+							{/if}
+
 							{#if isMobile}
 							<div class="settings-section">
 								<h3>{$ui("ui.vault")}</h3>
@@ -1754,6 +1819,32 @@
 									</button>
 								</label>
 								<NewNoteEditorSetting value={newNoteMode} onchange={saveNewNoteMode} />
+							</div>
+
+							<div class="settings-section">
+								<h3>{$ui("image.settingsTitle")}</h3>
+								<label class="setting-toggle">
+									<span class="setting-label">
+										<span class="setting-name">{$ui("image.askName")}</span>
+										<span class="setting-desc">{$ui("image.askNameDesc")}</span>
+									</span>
+									<button class="toggle-switch" class:on={askImageName} role="switch" aria-checked={askImageName} aria-label={$ui("image.askName")} onclick={() => { askImageName = !askImageName; void saveAttachmentSettings(); }}>
+										<span class="toggle-knob"></span>
+									</button>
+								</label>
+								{#if !isMobile}
+									<h3 style="margin-top: 12px;">{$ui("image.externalFolder")}</h3>
+									<input
+										type="text"
+										class="ai-key-input"
+										placeholder="assets"
+										value={externalAttachmentsFolder}
+										oninput={(e) => { externalAttachmentsFolder = (e.target as HTMLInputElement).value; }}
+										onblur={saveAttachmentSettings}
+									/>
+									<p class="setting-hint">{$ui("image.externalFolderHint")}</p>
+								{/if}
+								{#if attachmentMessage}<p class="setting-hint" role="alert" style="color: var(--text-danger, #ef4444);">{attachmentMessage}</p>{/if}
 							</div>
 
 
@@ -4373,4 +4464,11 @@
 		cursor: not-allowed;
 	}
 
+	.search-folder-list { list-style: none; margin: 8px 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+	.search-folder-list li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); }
+	.search-folder-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+	.search-folder-name { color: var(--text-primary); font-size: 13px; font-weight: 500; }
+	.search-folder-path { color: var(--text-tertiary, var(--text-secondary)); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.search-folder-remove { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: none; border-radius: 6px; background: transparent; color: var(--text-tertiary, var(--text-secondary)); cursor: pointer; flex-shrink: 0; }
+	.search-folder-remove:hover { background: var(--bg-hover, var(--bg-tertiary)); color: var(--text-primary); }
 </style>

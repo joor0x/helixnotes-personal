@@ -2,6 +2,7 @@ mod ai;
 mod asset_scope;
 mod backup;
 mod commands;
+mod external_assets;
 mod history;
 mod i18n;
 mod image_proxy;
@@ -9,6 +10,7 @@ mod languagetool;
 #[cfg(desktop)]
 pub mod mcp;
 mod search;
+mod search_folders;
 mod state;
 mod sync;
 mod types;
@@ -116,6 +118,10 @@ pub fn run() {
                 .lock()
                 .ok()
                 .and_then(|config| config.active_vault.clone());
+            #[cfg(desktop)]
+            if let Ok(config) = app.state::<AppState>().config.lock() {
+                search_folders::allow_folders(app.handle(), &config.search_folders);
+            }
             if let Some(vault_path) = active_vault {
                 if let Err(error) =
                     asset_scope::allow_vault_assets(app.handle(), std::path::Path::new(&vault_path))
@@ -222,6 +228,10 @@ pub fn run() {
             commands::set_task_priority,
             commands::set_task_due,
             commands::search_notes,
+            search_folders::add_search_folder,
+            search_folders::remove_search_folder,
+            external_assets::save_external_attachment,
+            external_assets::set_attachment_settings,
             commands::reindex,
             commands::get_trash,
             commands::restore_note,

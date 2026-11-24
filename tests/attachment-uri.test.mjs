@@ -104,3 +104,9 @@ test('Windows drive letters stay literal when a path outside the vault is writte
   );
   assert.equal(paths.resolveFileReference('C:/Users/me/pic%20one.png', '/v/Note.md', '/v').path, 'C:/Users/me/pic one.png');
 });
+
+test('files outside the vault link their assets relative to themselves', () => {
+  const asset = 'http://asset.localhost/' + encodeURIComponent('/repo/assets/captura 1.png');
+  assert.equal(paths.assetSourceToMarkdown(asset, '/repo/docs/instalacion.md', '/vault'), '../assets/captura%201.png');
+  assert.equal(paths.assetSourceToMarkdown(asset, '/repo/README.md', null), 'assets/captura%201.png');
+});

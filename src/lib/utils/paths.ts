@@ -108,6 +108,11 @@ export function assetSourceToMarkdown(
 	const url = new URL(source);
 	const suffix = url.search + url.hash;
 	const normalizedRoot = vaultRoot?.replace(/\\/g, '/').replace(/\/$/, '');
+	if (notePath && !(normalizedRoot && isPathInDirectory(notePath, normalizedRoot))) {
+		// A Markdown file outside the vault links its assets relative to itself, so they travel with it.
+		const normalizedNote = notePath.replace(/\\/g, '/');
+		return encodeMarkdownPath(relativePath(normalizedNote.substring(0, normalizedNote.lastIndexOf('/')), absolutePath)) + suffix;
+	}
 	if (!normalizedRoot || !isPathInDirectory(absolutePath, normalizedRoot)) return encodeMarkdownPath(absolutePath) + suffix;
 	const vaultRelative = absolutePath.substring(normalizedRoot.length + 1);
 	if (vaultRelative.startsWith('.helixnotes/') || !notePath) return encodeMarkdownPath(vaultRelative) + suffix;
