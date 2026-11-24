@@ -2,8 +2,9 @@
 	import { t as ui, label as uiLabel, tr as uiText, locale, setUiText, setUiLabel } from '$lib/i18n';
 	import AiImageOptions from './AiImageOptions.svelte';
 	import { isCliProvider } from '$lib/ai-cli';
-	import { LanguageTool } from '$lib/editor/languagetool';
-	import { languageToolCheck } from '$lib/api';
+	import { LanguageTool, noteLanguage, canonicalNoteLanguage } from '$lib/editor/languagetool';
+	import { languageToolCheck, setNoteLanguage } from '$lib/api';
+	import ThemedSelect from './ThemedSelect.svelte';
 	import { aiImageCandidates, protectAiMedia, restoreAiMedia, type AiImageCandidate } from '$lib/utils/ai-media';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { get } from 'svelte/store';
@@ -773,6 +774,37 @@
 	let imageViewer = $state<{ src: string; alt: string } | null>(null);
 	let copyToast = $state<'copying' | 'done' | null>(null);
 	let languageToolError = $state<string | null>(null);
+	const activeNoteLanguage = $derived($activeNote ? canonicalNoteLanguage(noteLanguage(splitSnapshot($activeNote.raw).metadata)) : null);
+	const noteLanguageOptions = $derived.by(() => {
+		const options = [
+			{ value: '', label: $ui('languagetool.noteDefault') },
+			{ value: 'auto', label: $ui('languagetool.langAuto') },
+			{ value: 'es', label: $ui('languagetool.langEs') },
+			{ value: 'ca-ES', label: $ui('languagetool.langCa') },
+			{ value: 'en-US', label: $ui('languagetool.langEnUs') },
+			{ value: 'en-GB', label: $ui('languagetool.langEnGb') },
+		];
+		if (activeNoteLanguage && !options.some(option => option.value === activeNoteLanguage)) {
+			options.push({ value: activeNoteLanguage, label: activeNoteLanguage });
+		}
+		return options;
+	});
+	let noteLanguageBusy = $state(false);
+
+	async function changeNoteLanguage(value: string) {
+		const path = $activeNotePath, vault = $appConfig?.active_vault;
+		if (!path || !vault || noteLanguageBusy || value === (activeNoteLanguage ?? '')) return;
+		noteLanguageBusy = true;
+		try {
+			// Same path as other native edits of the open note: save first, then reload it.
+			await applyNativeTaskChange(path, () => setNoteLanguage(vault, path, value || null, saves.raw));
+			editor?.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
+		} catch (error) {
+			showLanguageToolError(String(error));
+		} finally {
+			noteLanguageBusy = false;
+		}
+	}
 	let languageToolErrorTimer: ReturnType<typeof setTimeout> | null = null;
 	function showLanguageToolError(message: string) {
 		languageToolError = message.replace(/^Error:\s*/, '');
@@ -5751,6 +5783,7 @@
 				...($appConfig?.enable_wiki_links ? [WikiLink, WikiLinkAutocomplete] : []),
 				...($appConfig?.languagetool_enabled ? [LanguageTool.configure({
 					check: languageToolCheck,
+					language: () => noteLanguage($activeNote ? splitSnapshot($activeNote.raw).metadata : null),
 					labels: { ignore: uiText('languagetool.ignore'), noSuggestions: uiText('languagetool.noSuggestions') },
 					onError: showLanguageToolError,
 				})] : []),
@@ -8601,6 +8634,20 @@
 						</div>
 						{/if}
 					</div>
+
+					{#if $appConfig?.languagetool_enabled && !$viewerNote}
+						<div class="info-section info-note-language">
+							<span class="info-section-label">{$ui("languagetool.noteLanguage")}</span>
+							<ThemedSelect
+								id="note-language"
+								label={$ui("languagetool.noteLanguage")}
+								options={noteLanguageOptions}
+								value={activeNoteLanguage ?? ''}
+								disabled={noteLanguageBusy || $readOnly || $viewMode === 'trash'}
+								onchange={changeNoteLanguage}
+							/>
+						</div>
+					{/if}
 
 					{#key $activeNotePath}
 						<details class="info-section info-frontmatter">
@@ -13767,6 +13814,7 @@
 	}
 
 	.info-frontmatter { flex-shrink: 0; }
+	.info-note-language { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
 	.info-frontmatter > summary { cursor: pointer; margin-bottom: 0; padding: 2px 0; border-radius: 4px; }
 	.info-frontmatter[open] > summary { margin-bottom: 8px; }
 	.info-frontmatter > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

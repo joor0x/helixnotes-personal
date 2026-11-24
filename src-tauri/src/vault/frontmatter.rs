@@ -290,6 +290,60 @@ pub fn merge_frontmatter(original_raw: &str, meta: &NoteMeta, body: &str) -> Str
     format!("---\n{}---\n{}", yaml_str, body_with_heading)
 }
 
+/// Set (or with `None`, remove) the note's `lang` frontmatter key, keeping the body bytes
+/// and every other key. A `language` alias is replaced by `lang`. A note without
+/// frontmatter gets a minimal block only when a language is set.
+pub fn set_frontmatter_language(raw: &str, language: Option<&str>) -> Result<String, String> {
+    let (bom, rest) = match raw.strip_prefix('\u{FEFF}') {
+        Some(rest) => ("\u{FEFF}", rest),
+        None => ("", raw),
+    };
+    let open_len = if rest.starts_with("---\n") {
+        4
+    } else if rest.starts_with("---\r\n") {
+        5
+    } else {
+        0
+    };
+    // Closing fence: a line that is exactly `---`.
+    let block = (open_len > 0)
+        .then(|| {
+            let mut offset = open_len;
+            for line in rest[open_len..].split_inclusive('\n') {
+                if line.trim_end_matches(['\r', '\n']) == "---" {
+                    return Some((offset, offset + line.len()));
+                }
+                offset += line.len();
+            }
+            None
+        })
+        .flatten();
+    let Some((yaml_end, body_start)) = block else {
+        return Ok(match language {
+            Some(language) => format!("---\nlang: {language}\n---\n{raw}"),
+            None => raw.to_string(),
+        });
+    };
+    let yaml = &rest[open_len..yaml_end];
+    let mut mapping: serde_yaml::Mapping = if yaml.trim().is_empty() {
+        serde_yaml::Mapping::new()
+    } else {
+        serde_yaml::from_str(yaml).map_err(|_| "The note's frontmatter is not valid YAML")?
+    };
+    mapping.remove("lang");
+    mapping.remove("language");
+    if let Some(language) = language {
+        mapping.insert("lang".into(), language.into());
+    }
+    let yaml = if mapping.is_empty() {
+        String::new()
+    } else {
+        serde_yaml::to_string(&serde_yaml::Value::Mapping(mapping))
+            .map_err(|_| "Could not write the note's frontmatter")?
+    };
+    Ok(format!("{bom}---\n{yaml}---\n{}", &rest[body_start..]))
+}
+
 pub fn filename_to_title(filename: &str) -> String {
     let stem = filename.trim_end_matches(".md");
     // Only replace dashes/underscores acting as word separators (between non-space chars).
@@ -727,5 +781,40 @@ mod tests {
             "# New\n\n## Section"
         );
         assert!(update_note_raw(&meta("New"), "\n").ends_with("---\n\n"));
+    }
+}
+
+#[cfg(test)]
+mod language_tests {
+    use super::set_frontmatter_language;
+
+    #[test]
+    fn sets_replaces_and_removes_lang_without_touching_the_body() {
+        let raw = "---\nid: abc\ntitle: Nota\nlanguage: es\n---\n# Nota\n\nHola  \n---\nfi\n";
+        let set = set_frontmatter_language(raw, Some("ca")).unwrap();
+        assert_eq!(
+            set,
+            "---\nid: abc\ntitle: Nota\nlang: ca\n---\n# Nota\n\nHola  \n---\nfi\n"
+        );
+        let removed = set_frontmatter_language(&set, None).unwrap();
+        assert_eq!(
+            removed,
+            "---\nid: abc\ntitle: Nota\n---\n# Nota\n\nHola  \n---\nfi\n"
+        );
+    }
+
+    #[test]
+    fn handles_missing_crlf_bom_and_invalid_frontmatter() {
+        assert_eq!(
+            set_frontmatter_language("Hola\n", Some("es")).unwrap(),
+            "---\nlang: es\n---\nHola\n"
+        );
+        assert_eq!(set_frontmatter_language("Hola\n", None).unwrap(), "Hola\n");
+        let crlf = "\u{FEFF}---\r\ntitle: T\r\n---\r\nBody\r\n";
+        assert_eq!(
+            set_frontmatter_language(crlf, Some("en-GB")).unwrap(),
+            "\u{FEFF}---\ntitle: T\nlang: en-GB\n---\nBody\r\n"
+        );
+        assert!(set_frontmatter_language("---\n: [bad\n---\nx", Some("ca")).is_err());
     }
 }

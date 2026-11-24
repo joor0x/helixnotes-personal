@@ -64,6 +64,53 @@ struct RawRule {
     issue_type: String,
 }
 
+/// Normalize a per-note language code from frontmatter (`ca`, `en_GB`, `es-ES`, ...).
+/// Short codes get the variant LanguageTool needs for spell checking. Returns `None`
+/// for anything that does not look like a language code.
+pub fn normalize_language(code: &str) -> Option<String> {
+    let code = code.trim().replace('_', "-");
+    let mut parts = code.split('-');
+    let primary = parts.next()?.to_ascii_lowercase();
+    if primary == "auto" && parts.clone().next().is_none() {
+        return Some("auto".into());
+    }
+    if !(2..=3).contains(&primary.len()) || !primary.bytes().all(|b| b.is_ascii_lowercase()) {
+        return None;
+    }
+    let rest: Vec<&str> = parts.collect();
+    if rest.len() > 2
+        || rest
+            .iter()
+            .any(|p| !(2..=8).contains(&p.len()) || !p.bytes().all(|b| b.is_ascii_alphanumeric()))
+    {
+        return None;
+    }
+    if rest.is_empty() {
+        let variant = match primary.as_str() {
+            "ca" => "ca-ES",
+            "en" => "en-US",
+            "de" => "de-DE",
+            "pt" => "pt-PT",
+            _ => return Some(primary),
+        };
+        return Some(variant.into());
+    }
+    // LanguageTool codes: region upper-case (en-GB), longer subtags lower-case (ca-ES-valencia).
+    let rest = rest.iter().map(|p| {
+        if p.len() == 2 {
+            p.to_ascii_uppercase()
+        } else {
+            p.to_ascii_lowercase()
+        }
+    });
+    Some(
+        std::iter::once(primary)
+            .chain(rest)
+            .collect::<Vec<_>>()
+            .join("-"),
+    )
+}
+
 fn check_url(base: &str) -> String {
     let base = base.trim().trim_end_matches('/');
     let base = base.strip_suffix("/v2/check").unwrap_or(base);
@@ -145,12 +192,46 @@ pub fn set_languagetool_settings(
     Ok(())
 }
 
-/// Check one batch of prose. `data` is LanguageTool's annotation JSON.
+/// Set or clear a note's LanguageTool language (`lang` frontmatter key).
+#[tauri::command]
+pub async fn set_note_language(
+    state: State<'_, AppState>,
+    vault_path: String,
+    path: String,
+    language: Option<String>,
+    expected_raw: String,
+) -> Result<(), String> {
+    state.validate_vault(&vault_path)?;
+    let language = match language.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(code) => Some(normalize_language(code).ok_or("Invalid note language")?),
+    };
+    let guard = state.note_save.clone().lock_owned().await;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = guard;
+        crate::vault::operations::set_note_language(
+            &vault_path,
+            &path,
+            language.as_deref(),
+            &expected_raw,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Check one batch of prose. `data` is LanguageTool's annotation JSON; `language` is an
+/// optional per-note override (from frontmatter) of the language saved in Settings.
 #[tauri::command]
 pub async fn languagetool_check(
     state: State<'_, AppState>,
     data: String,
+    language: Option<String>,
 ) -> Result<Vec<LtMatch>, String> {
+    let note_language = match language.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(code) => Some(normalize_language(code).ok_or("Invalid note language")?),
+    };
     if data.len() > MAX_REQUEST_BYTES {
         return Err("Text is too long to check in one request".into());
     }
@@ -164,7 +245,8 @@ pub async fn languagetool_check(
             return Err("LanguageTool is disabled".into());
         }
         let base = config.languagetool_url.as_deref().unwrap_or(DEFAULT_URL);
-        (check_url(base), config.languagetool_language.clone())
+        let language = note_language.unwrap_or_else(|| config.languagetool_language.clone());
+        (check_url(base), language)
     };
     validate_url(&url)?;
 
@@ -213,6 +295,31 @@ mod tests {
             check_url("http://localhost:8081/"),
             "http://localhost:8081/v2/check"
         );
+    }
+
+    #[test]
+    fn normalizes_frontmatter_language_codes() {
+        let cases = [
+            ("ca", "ca-ES"),
+            ("en", "en-US"),
+            ("es", "es"),
+            ("ES", "es"),
+            ("en_gb", "en-GB"),
+            ("es-ES", "es-ES"),
+            ("ca-es-VALENCIA", "ca-ES-valencia"),
+            ("fr", "fr"),
+            ("auto", "auto"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                normalize_language(input).as_deref(),
+                Some(expected),
+                "{input}"
+            );
+        }
+        for bad in ["", "c", "català", "en-", "en/US", "a-b-c-d", "e1"] {
+            assert_eq!(normalize_language(bad), None, "{bad}");
+        }
     }
 
     #[test]

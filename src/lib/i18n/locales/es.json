@@ -1235,8 +1235,10 @@
   "languagetool.langCa": "Catalán",
   "languagetool.langEnUs": "Inglés (EE. UU.)",
   "languagetool.langEnGb": "Inglés (Reino Unido)",
-  "languagetool.scopeHint": "Los cambios se aplican a las notas que abras después. El modo código fuente no se revisa.",
+  "languagetool.scopeHint": "Los cambios se aplican a las notas que abras después. Una nota puede fijar su idioma con lang: ca (o es, en, en-GB...) en su frontmatter. El modo código fuente no se revisa.",
   "languagetool.ignore": "Ignorar",
   "languagetool.noSuggestions": "Sin sugerencias",
-  "languagetool.error": "LanguageTool: {error}"
+  "languagetool.error": "LanguageTool: {error}",
+  "languagetool.noteLanguage": "Idioma de la revisión",
+  "languagetool.noteDefault": "El de Ajustes"
 }

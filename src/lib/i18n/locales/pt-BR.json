@@ -1235,8 +1235,10 @@
   "languagetool.langCa": "Catalan",
   "languagetool.langEnUs": "English (US)",
   "languagetool.langEnGb": "English (UK)",
-  "languagetool.scopeHint": "Changes apply to notes opened afterwards. Source mode is not checked.",
+  "languagetool.scopeHint": "Changes apply to notes opened afterwards. A note can set its own language with lang: ca (or es, en, en-GB...) in its frontmatter. Source mode is not checked.",
   "languagetool.ignore": "Ignore",
   "languagetool.noSuggestions": "No suggestions",
-  "languagetool.error": "LanguageTool: {error}"
+  "languagetool.error": "LanguageTool: {error}",
+  "languagetool.noteLanguage": "Spell-check language",
+  "languagetool.noteDefault": "Settings default"
 }

@@ -275,6 +275,7 @@ pub fn run() {
             commands::ai_ask,
             languagetool::set_languagetool_settings,
             languagetool::languagetool_check,
+            languagetool::set_note_language,
             commands::set_sync_settings,
             commands::test_sync_connection,
             commands::sync_now,

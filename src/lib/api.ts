@@ -643,8 +643,12 @@ export async function setLanguageToolSettings(enabled: boolean, url: string | nu
   return invoke("set_languagetool_settings", { enabled, url, language });
 }
 
-export async function languageToolCheck(data: string): Promise<import('./editor/languagetool').LtMatch[]> {
-  return invoke("languagetool_check", { data });
+export async function setNoteLanguage(vaultPath: string, path: string, language: string | null, expectedRaw: string): Promise<void> {
+  return invoke("set_note_language", { vaultPath, path, language, expectedRaw });
+}
+
+export async function languageToolCheck(data: string, language: string | null = null): Promise<import('./editor/languagetool').LtMatch[]> {
+  return invoke("languagetool_check", { data, language });
 }
 
 export async function testAiConnection(): Promise<void> {

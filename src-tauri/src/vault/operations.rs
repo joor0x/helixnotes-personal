@@ -903,6 +903,27 @@ pub fn save_note(
     }))
 }
 
+/// Change only the note's `lang` frontmatter key. Fails like a save when the file no longer
+/// matches the editor's last accepted version.
+pub fn set_note_language(
+    vault_path: &str,
+    path: &str,
+    language: Option<&str>,
+    expected_raw: &str,
+) -> Result<(), String> {
+    let validated = ensure_note_path(vault_path, Path::new(path))?;
+    let target = canonicalize_path(&validated, "note path")?;
+    let existing = read_note_content(&target, path)?;
+    if existing.raw != expected_raw {
+        return Err("Save conflict: note changed on disk. Reopen the note and try again.".into());
+    }
+    let raw = frontmatter::set_frontmatter_language(&existing.raw, language)?;
+    if raw != existing.raw {
+        replace_file_atomically(&target, raw.as_bytes())?;
+    }
+    Ok(())
+}
+
 pub(crate) fn replace_file_atomically(path: &Path, content: &[u8]) -> Result<(), String> {
     let permissions = match fs::metadata(path) {
         Ok(metadata) => {

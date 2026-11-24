@@ -108,6 +108,27 @@ export function matchRange(block: LtBlock, match: LtMatch): { from: number; to: 
 	return from !== null && to !== null && to > from ? { from, to } : null;
 }
 
+/**
+ * Per-note language from YAML frontmatter text (without the `---` fences): a top-level
+ * `lang:` or `language:` key such as `lang: ca` or `language: "en-GB"`. The backend
+ * validates and normalizes the code; anything malformed here is ignored.
+ */
+/** Short codes as the backend stores them (`ca` → `ca-ES`), to match the selector options. */
+export function canonicalNoteLanguage(code: string | null): string | null {
+	if (!code) return null;
+	const value = code.replace(/_/g, '-');
+	const lower = value.toLowerCase();
+	if (lower === 'ca') return 'ca-ES';
+	if (lower === 'en') return 'en-US';
+	const [primary, ...rest] = value.split('-');
+	return [primary.toLowerCase(), ...rest.map(part => part.length === 2 ? part.toUpperCase() : part.toLowerCase())].join('-');
+}
+
+export function noteLanguage(metadata: string | null | undefined): string | null {
+	const found = /^(?:lang|language)[ \t]*:[ \t]*["']?([A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8}){0,2}|auto)["']?[ \t]*(?:#.*)?$/m.exec(metadata ?? '');
+	return found ? found[1] : null;
+}
+
 function ignoreKey(match: LtMatch, text: string) {
 	return `${match.ruleId}\u0000${text}`;
 }
@@ -133,10 +154,15 @@ function issueClass(issueType: string) {
 
 type DecorationSpec = { match: LtMatch; text: string };
 
-export function buildDecorations(doc: ProseMirrorNode, cache: Map<string, LtMatch[]>, ignored: Set<string>): DecorationSet {
+/** Cache key of a block's results: the same text checked in another language differs. */
+export function cacheKey(language: string | null, block: LtBlock) {
+	return `${language ?? ''}\u0001${block.key}`;
+}
+
+export function buildDecorations(doc: ProseMirrorNode, cache: Map<string, LtMatch[]>, ignored: Set<string>, language: string | null = null): DecorationSet {
 	const decorations: Decoration[] = [];
 	for (const block of collectBlocks(doc)) {
-		for (const match of cache.get(block.key) ?? []) {
+		for (const match of cache.get(cacheKey(language, block)) ?? []) {
 			const range = matchRange(block, match);
 			if (!range) continue;
 			const text = doc.textBetween(range.from, range.to);
@@ -150,7 +176,9 @@ export function buildDecorations(doc: ProseMirrorNode, cache: Map<string, LtMatc
 }
 
 export type LanguageToolOptions = {
-	check: (data: string) => Promise<LtMatch[]>;
+	check: (data: string, language: string | null) => Promise<LtMatch[]>;
+	/** Per-note language override, read at each check (null = the Settings language). */
+	language?: () => string | null;
 	labels: { ignore: string; noSuggestions: string };
 	onError?: (message: string) => void;
 	debounceMs?: number;
@@ -164,6 +192,7 @@ export const LanguageTool = Extension.create<LanguageToolOptions>({
 	addOptions() {
 		return {
 			check: async () => [],
+			language: undefined,
 			labels: { ignore: 'Ignore', noSuggestions: 'No suggestions' },
 			onError: undefined,
 			debounceMs: 1200,
@@ -180,7 +209,7 @@ export const LanguageTool = Extension.create<LanguageToolOptions>({
 
 		const refresh = (view: EditorView) => {
 			if (view.isDestroyed) return;
-			const decorations = buildDecorations(view.state.doc, cache, ignored);
+			const decorations = buildDecorations(view.state.doc, cache, ignored, options.language?.() ?? null);
 			view.dispatch(view.state.tr.setMeta(languageToolKey, decorations).setMeta('addToHistory', false));
 		};
 
@@ -275,22 +304,25 @@ export const LanguageTool = Extension.create<LanguageToolOptions>({
 				view(view) {
 					let timer: ReturnType<typeof setTimeout> | null = null;
 					let running = false, again = false, lastError = '';
+					let lastLanguage = options.language?.() ?? null;
 
 					const run = async () => {
 						if (running) { again = true; return; }
 						running = true;
 						try {
+							const language = options.language?.() ?? null;
 							const seen = new Set<string>();
 							const pending = collectBlocks(view.state.doc).filter(block => {
-								if (cache.has(block.key) || seen.has(block.key)) return false;
-								seen.add(block.key);
+								const key = cacheKey(language, block);
+								if (cache.has(key) || seen.has(key)) return false;
+								seen.add(key);
 								return true;
 							});
 							for (const batch of buildBatches(pending)) {
 								if (view.isDestroyed) return;
-								const matches = await options.check(batch.data);
+								const matches = await options.check(batch.data, language);
 								splitMatches(matches, batch.starts, batch.blocks)
-									.forEach((blockMatches, i) => cache.set(batch.blocks[i].key, blockMatches));
+									.forEach((blockMatches, i) => cache.set(cacheKey(language, batch.blocks[i]), blockMatches));
 							}
 							lastError = '';
 							refresh(view);
@@ -318,7 +350,14 @@ export const LanguageTool = Extension.create<LanguageToolOptions>({
 
 					return {
 						update(view, previous) {
-							if (!view.state.doc.eq(previous.doc)) {
+							const language = options.language?.() ?? null;
+							if (language !== lastLanguage) {
+								// A new note language invalidates every mark: clear them and re-check now.
+								lastLanguage = language;
+								closePopover();
+								refresh(view);
+								schedule(0);
+							} else if (!view.state.doc.eq(previous.doc)) {
 								closePopover();
 								schedule(options.debounceMs ?? 1200);
 							}
