@@ -48,8 +48,9 @@
 	} from '$lib/utils/notebook-icons';
 	import { TAG_COLOR_PRESETS } from '$lib/utils/tag-styles';
 
-	let { onViewChanged = () => {}, onBeforeNoteChange = async () => true, onBeforePathMutation = async () => null, onPathsMoved = async (_old: string, _next: string) => {} }: {
+	let { onViewChanged = () => {}, onBeforeNoteChange = async () => true, onBeforePathMutation = async () => null, onPathsMoved = async (_old: string, _next: string) => {}, onOpenFile }: {
 		onViewChanged?: () => void;
+		onOpenFile?: () => void;
 		onBeforeNoteChange?: () => Promise<boolean>;
 		onBeforePathMutation?: () => Promise<(() => void) | null>;
 		onPathsMoved?: (oldPath: string, nextPath: string) => Promise<void>;
@@ -1037,6 +1038,16 @@
 				</svg>
 			</button>
 			<div class="sidebar-footer-right">
+			{#if onOpenFile && !isMobile}
+				<button class="icon-btn" onclick={onOpenFile} title={$ui("ui.open_markdown_file")} aria-label={$ui("ui.open_markdown_file")}>
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+						<polyline points="14 2 14 8 20 8" />
+						<line x1="12" y1="18" x2="12" y2="12" />
+						<polyline points="9 15 12 12 15 15" />
+					</svg>
+				</button>
+			{/if}
 			<button class="icon-btn" onclick={() => ($showSettings = true)} title={$ui("ui.settings")}>
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 					<circle cx="12" cy="12" r="3" />

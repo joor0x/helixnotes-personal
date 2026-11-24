@@ -54,6 +54,18 @@ pub fn allow_vault_assets<R: Runtime>(app: &AppHandle<R>, vault_path: &Path) -> 
         .map_err(|error| error.to_string())
 }
 
+/// Grants the file-system and asset scopes for a Markdown file the user opened from
+/// outside the vault (OS "Open with", the command line or the in-app file dialog).
+pub fn allow_opened_markdown<R: Runtime>(app: &AppHandle<R>, note_path: &Path) {
+    let _ = app.fs_scope().allow_file(note_path);
+    if let Some(parent) = note_path.parent() {
+        let _ = app.fs_scope().allow_directory(parent, true);
+    }
+    if let Err(error) = allow_external_note_assets(app, note_path) {
+        log::warn!("{error}");
+    }
+}
+
 /// Grants access to relative assets next to a Markdown file explicitly opened by the user.
 pub fn allow_external_note_assets<R: Runtime>(
     app: &AppHandle<R>,

@@ -71,9 +71,10 @@ export const activeNotebook = writable<NotebookEntry | null>(null);
 export const activeTag = writable<string | null>(null);
 
 // External-file viewer mode: set when an .md file outside the active vault is opened.
-// While set, the editor is forced read-only, autosave is suppressed, and a banner
-// offering "Import to vault" / "Close" is shown.
-export const viewerNote = writable<{ path: string; content: string } | null>(
+// While set, the editor is read-only and autosave is suppressed until the user chooses
+// "Edit" (`editable`), which saves the body back to the file in place. The banner also
+// offers "Import to vault" / "Close".
+export const viewerNote = writable<{ path: string; content: string; editable?: boolean } | null>(
   null,
 );
 

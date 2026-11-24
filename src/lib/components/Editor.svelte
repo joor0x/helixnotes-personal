@@ -42,7 +42,7 @@
 	import { openFile, openUrl, copyFileTo, copyImageToClipboard as copyImageToClipboardCmd, writeBytesTo, copyPngToClipboard, copyTextToClipboard } from '$lib/api';
 	import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 	import { activeNote, activeNotePath, appConfig, editorDirty, sourceMode, livePreviewMode, focusMode, readOnly, quickAccessPaths, notes, navHistory, canGoBack, canGoForward, viewerNote, viewMode, notebooks, outlineWidth } from '$lib/stores/app';
-	import { saveNote, importNote, createNote, saveImage, saveAttachment, readClipboardImage, readClipboardContents, addQuickAccess, removeQuickAccess, getQuickAccess, getNoteVersions, getNoteVersionContent, createVersion, aiAsk, getAllNoteTitles, readNote, renameNote, setToolbarLayout } from '$lib/api';
+	import { saveNote, saveExternalNote, importNote, createNote, saveImage, saveAttachment, readClipboardImage, readClipboardContents, addQuickAccess, removeQuickAccess, getQuickAccess, getNoteVersions, getNoteVersionContent, createVersion, aiAsk, getAllNoteTitles, readNote, renameNote, setToolbarLayout } from '$lib/api';
 	import type { NoteContent, VersionEntry, AiStreamEvent, NoteTitleEntry, TaskItem as TaskRecord, FileEvent, SearchTarget, ToolbarLayout } from '$lib/types';
 	import { listen } from '@tauri-apps/api/event';
 	import { debounce } from '$lib/utils/debounce';
@@ -993,7 +993,23 @@
 		setTimeout(() => { viewerToast = null; }, 1500);
 	}
 
-	function closeViewer() {
+	/** An external file is read-only until the user chooses to edit it in place. */
+	function viewerLocked(): boolean {
+		const v = get(viewerNote);
+		return !!v && !v.editable;
+	}
+
+	async function setViewerEditing(editing: boolean) {
+		const v = $viewerNote;
+		if (!v || !!v.editable === editing) return;
+		if (!editing && !(await flushSave())) return;
+		if ($viewerNote?.path !== v.path) return;
+		$viewerNote = { ...v, editable: editing };
+		$readOnly = !editing;
+	}
+
+	async function closeViewer() {
+		if ($viewerNote?.editable && !(await flushSave())) return;
 		beginEditorNoteNavigation();
 		$viewerNote = null;
 		$activeNote = null;
@@ -3618,7 +3634,7 @@
 	}
 
 	async function saveConflictCopy() {
-		if (!saveError?.conflict || !$activeNote || !$activeNotePath || !$appConfig?.active_vault || retryingSave) return;
+		if (!saveError?.conflict || !$activeNote || !$activeNotePath || !$appConfig?.active_vault || retryingSave || $viewerNote) return;
 		const origin = captureOrigin();
 		const vault = origin.vault!;
 		const originalPath = origin.path!;
@@ -3674,7 +3690,7 @@
 	export function forceSave(allowWhileTrashing = false): Promise<boolean> {
 		saves.cancelScheduled();
 		if (externalOperationBusy || pathMigrationPending) return Promise.resolve(false);
-		if (get(viewerNote) || !$activeNote || !$activeNotePath) return Promise.resolve(true);
+		if (viewerLocked() || !$activeNote || !$activeNotePath) return Promise.resolve(true);
 		if ((renamingNote && saves.isCurrentSession(renamingNote)) || (trashingNote && !allowWhileTrashing)) return Promise.resolve(false);
 		if (!$editorDirty) return Promise.resolve(true);
 		// Refuse an uninitialized/stale surface, not an intentionally deleted body.
@@ -3707,7 +3723,14 @@
 			}
 			const blobImages = savedBlobImages;
 			let savedContent: NoteContent | null = null;
+			const external = !!get(viewerNote);
 			return saves.save(snapshot, async (expectedRaw) => {
+				if (external) {
+					// Outside the vault there is nowhere to keep pasted images; never write blob: links.
+					if (blobUrls.size) throw new Error(uiText('error.externalImages'));
+					savedContent = await saveExternalNote(vault, path, body, expectedRaw);
+					return savedContent.raw;
+				}
 				for (const url of blobUrls) {
 					let relativePath = blobImages.get(url);
 					if (!relativePath) {
@@ -3812,7 +3835,7 @@
 	$effect(() => {
 		const v = $viewerNote;
 		untrack(() => {
-			if (editor && v) editor.setEditable(false);
+			if (editor && v && !v.editable) editor.setEditable(false);
 		});
 	});
 
@@ -4061,8 +4084,8 @@
 			}
 		} finally {
 			externalOperationBusy = false;
-			source.configure($readOnly || !!$viewerNote, !isMobile && ($appConfig?.show_line_numbers ?? false));
-			editor?.setEditable(!$readOnly && !$viewerNote);
+			source.configure($readOnly || viewerLocked(), !isMobile && ($appConfig?.show_line_numbers ?? false));
+			editor?.setEditable(!$readOnly && !viewerLocked());
 		}
 	}
 
@@ -4078,8 +4101,8 @@
 			if (released || editorDisposed) return;
 			released = true;
 			externalOperationBusy = false;
-			source.configure($readOnly || !!$viewerNote, !isMobile && ($appConfig?.show_line_numbers ?? false));
-			editor?.setEditable(!$readOnly && !$viewerNote);
+			source.configure($readOnly || viewerLocked(), !isMobile && ($appConfig?.show_line_numbers ?? false));
+			editor?.setEditable(!$readOnly && !viewerLocked());
 		};
 	}
 
@@ -4169,10 +4192,11 @@
 		// Viewer mode (external file) always forces read-only. New notes stay editable and
 		// use the saved editor preference without changing existing notes' presentation.
 		const isViewer = !!get(viewerNote);
+		const viewerReadOnly = viewerLocked();
 		const isNewNote = $activeNote?.meta.title === 'Untitled' && !content.replace(/^---[\s\S]*?---\s*/, '').trim();
 		if (isNewNote && !isViewer && !preservePresentation) selectEditorMode(newNoteEditorMode($appConfig));
 		lastSourceMode = $sourceMode;
-		const shouldBeReadOnly = isViewer || isTrashedNote(path, $appConfig?.active_vault)
+		const shouldBeReadOnly = viewerReadOnly || isTrashedNote(path, $appConfig?.active_vault)
 			? true : preservePresentation ? $readOnly : (isNewNote ? false : ($appConfig?.default_view_mode ?? false));
 		$readOnly = shouldBeReadOnly;
 		if (editor) editor.setEditable(!shouldBeReadOnly && !externalOperationBusy);
@@ -5210,7 +5234,7 @@
 	}
 
 	function canReplaceInNote(): boolean {
-		if ($readOnly || $viewerNote || trashPreview || showHistory || externalOperationBusy) return false;
+		if ($readOnly || viewerLocked() || trashPreview || showHistory || externalOperationBusy) return false;
 		return $sourceMode ? !!source.view : !!editor?.isEditable;
 	}
 
@@ -5824,7 +5848,7 @@
 					// the normal onUpdate -> autoSave path. Edit mode keeps TipTap's behaviour.
 					click: (view, event) => {
 						if (!get(readOnly)) return false;
-						if (get(viewerNote)) return false; // external viewer files are never saved
+						if (viewerLocked()) return false; // a read-only external file is never saved
 						const target = event.target as HTMLElement;
 						const label = target.closest('li[data-checked] > label');
 						if (!label) return false;
@@ -8069,6 +8093,7 @@
 			<div class="shortcuts-hint">
 				<span><kbd>{modKey}</kbd>+<kbd>N</kbd> {$ui("ui.new_note")}</span>
 				<span><kbd>{modKey}</kbd>+<kbd>P</kbd> {$ui("ui.quick_open")}</span>
+				{#if !isMobile}<span><kbd>{modKey}</kbd>+<kbd>O</kbd> {$ui("ui.open_markdown_file")}</span>{/if}
 			</div>
 		</div>
 	{:else}
@@ -8077,10 +8102,13 @@
 				<svg class="viewer-banner-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 					<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
 				</svg>
-				<span class="viewer-banner-label">{$ui("ui.read_only_viewer")}</span>
+				<span class="viewer-banner-label">{$viewerNote.editable ? $ui("ui.editing_external_file") : $ui("ui.read_only_viewer")}</span>
 				<code class="viewer-banner-path" title={$viewerNote.path}>{$viewerNote.path}</code>
 				<div class="viewer-banner-actions">
-					<button type="button" class="viewer-banner-btn primary" onclick={() => (viewerImportPickerOpen = true)} disabled={viewerImportBusy || !$appConfig?.active_vault}>{$ui("ui.import_to_vault")}</button>
+					{#if !isMobile}
+						<button type="button" class="viewer-banner-btn" class:primary={!$viewerNote.editable} onclick={() => setViewerEditing(!$viewerNote?.editable)} disabled={viewerImportBusy || externalOperationBusy} title={$viewerNote.editable ? undefined : $ui("ui.edit_in_place_hint")}>{$viewerNote.editable ? $ui("ui.done_editing") : $ui("ui.edit_in_place")}</button>
+					{/if}
+					<button type="button" class="viewer-banner-btn" class:primary={$viewerNote.editable} onclick={() => (viewerImportPickerOpen = true)} disabled={viewerImportBusy || !$appConfig?.active_vault}>{$ui("ui.import_to_vault")}</button>
 					<button type="button" class="viewer-banner-btn" onclick={closeViewer}>{$ui("ui.close")}</button>
 				</div>
 				{#if viewerToast}
@@ -8323,11 +8351,13 @@
 		{#if externalOperationBusy}
 			<div class="save-error" role="status">{$ui("ui.updating_note_location_or_task_editing_will_resume_shortly")}</div>
 		{/if}
-		{#if saveError && $editorDirty && !$viewerNote && saveError.path === $activeNotePath && saveError.vault === $appConfig?.active_vault}
+		{#if saveError && $editorDirty && !viewerLocked() && saveError.path === $activeNotePath && saveError.vault === $appConfig?.active_vault}
 			<div class="save-error" role="alert">
 				<span><strong>{$ui("ui.save_failed")}</strong> {saveError.message}</span>
 				{#if saveError.conflict}
-					<button type="button" onclick={saveConflictCopy} disabled={retryingSave} aria-label={$ui("ui.save_draft_as_a_copy")}>{$ui("ui.save_a_copy")}</button>
+					{#if !$viewerNote}
+						<button type="button" onclick={saveConflictCopy} disabled={retryingSave} aria-label={$ui("ui.save_draft_as_a_copy")}>{$ui("ui.save_a_copy")}</button>
+					{/if}
 					<button type="button" onclick={reloadConflictedNote} disabled={retryingSave} aria-label={$ui("ui.discard_draft_and_reload_note")}>{$ui("ui.reload_from_disk")}</button>
 				{:else}
 					<button type="button" onclick={retrySave} disabled={retryingSave} aria-label={$ui("ui.retry_saving_note")}>
@@ -8418,7 +8448,7 @@
 					</button>
 				</div>
 				{#if noteReplaceOpen}
-					{@const replaceDisabled = (!noteSearchPending && !noteSearchResults.length) || $readOnly || !!$viewerNote || trashPreview || showHistory}
+					{@const replaceDisabled = (!noteSearchPending && !noteSearchResults.length) || $readOnly || (!!$viewerNote && !$viewerNote.editable) || trashPreview || showHistory}
 					<div class="note-search-bar note-replace-bar">
 						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5;flex-shrink:0"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
 						<input
@@ -8442,12 +8472,12 @@
 			<div class="editor-body-row" class:reviewing-history={showHistory}>
 			<div class="editor-body" class:source-body={$sourceMode} class:history-hidden={showHistory} onscroll={scheduleOutlineActive}>
 				{#if isMobile}
-					<SourceEditor controller={source} readonly={showHistory || $readOnly || !!$viewerNote || externalOperationBusy} visible={$sourceMode} preview={$livePreviewMode} resolveImage={resolveImageSrc} openLink={openPreviewLink} context={sourceAssetContext} mobile />
+					<SourceEditor controller={source} readonly={showHistory || $readOnly || (!!$viewerNote && !$viewerNote.editable) || externalOperationBusy} visible={$sourceMode} preview={$livePreviewMode} resolveImage={resolveImageSrc} openLink={openPreviewLink} context={sourceAssetContext} mobile />
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div class="tiptap-wrapper" class:large-doc={isLargeDoc} style={$sourceMode ? 'display:none' : ''} spellcheck="false" bind:this={editorElement} onerrorcapture={retryFailedImage} onclick={(e) => { closeLinkContextMenu(); handleEditorClick(e); }} onkeydown={(e) => { if (e.key === 'Escape') closeLinkContextMenu(); }}></div>
 				{:else}
 					{#if $sourceMode}
-						<SourceEditor controller={source} readonly={showHistory || $readOnly || !!$viewerNote || externalOperationBusy} numbers={$appConfig?.show_line_numbers ?? false} preview={$livePreviewMode} resolveImage={resolveImageSrc} openLink={openPreviewLink} context={sourceAssetContext} />
+						<SourceEditor controller={source} readonly={showHistory || $readOnly || (!!$viewerNote && !$viewerNote.editable) || externalOperationBusy} numbers={$appConfig?.show_line_numbers ?? false} preview={$livePreviewMode} resolveImage={resolveImageSrc} openLink={openPreviewLink} context={sourceAssetContext} />
 					{:else}
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div class="tiptap-wrapper" class:large-doc={isLargeDoc} spellcheck="false" bind:this={editorElement} onerrorcapture={retryFailedImage} onclick={(e) => { closeLinkContextMenu(); handleEditorClick(e); }} onkeydown={(e) => { if (e.key === 'Escape') closeLinkContextMenu(); }} oncontextmenu={handleEditorContextMenu}></div>
@@ -8677,7 +8707,7 @@
 			</div>
 		</div>
 
-		{#if editorReady && !$sourceMode && !$viewerNote && !showHistory}
+		{#if editorReady && !$sourceMode && (!$viewerNote || $viewerNote.editable) && !showHistory}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="editor-formatting-bar"

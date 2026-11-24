@@ -974,6 +974,74 @@ pub async fn read_note<R: Runtime>(
     .map_err(|error| error.to_string())?
 }
 
+/// Accept a Markdown file picked in the open dialog (which granted its scope) and extend the
+/// grant to its folder so relative images resolve, as for files opened from the OS.
+#[tauri::command]
+pub fn open_external_markdown<R: Runtime>(
+    app: AppHandle<R>,
+    path: String,
+) -> Result<String, String> {
+    let picked = Path::new(&path);
+    if !app.fs_scope().is_allowed(picked) {
+        return Err("Path was not selected by the user".to_string());
+    }
+    let target = std::fs::canonicalize(picked).map_err(|error| error.to_string())?;
+    if !target.is_file()
+        || target.extension().and_then(|extension| extension.to_str()) != Some("md")
+    {
+        return Err("Note path must point to a Markdown file".to_string());
+    }
+    crate::asset_scope::allow_opened_markdown(&app, &target);
+    target
+        .to_str()
+        .map(str::to_string)
+        .ok_or_else(|| "Path is not valid UTF-8".to_string())
+}
+
+/// Save a Markdown file opened from outside the vault back to where it lives. Only the
+/// body changes: its frontmatter is kept verbatim and the file is never copied into the vault.
+#[tauri::command]
+pub async fn save_external_note<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    vault_path: String,
+    path: String,
+    body: String,
+    expected_raw: String,
+) -> Result<NoteContent, String> {
+    state.validate_vault(&vault_path)?;
+    let save_guard = state.note_save.clone().lock_owned().await;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _save_guard = save_guard;
+        let vault = std::fs::canonicalize(&vault_path).map_err(|error| error.to_string())?;
+        let target = std::fs::canonicalize(&path).map_err(|error| error.to_string())?;
+        if target.starts_with(&vault) {
+            return Err("Notes inside the vault are saved as vault notes".to_string());
+        }
+        // Same grant as read_note: only files the user opened from the OS or a dialog.
+        ensure_scoped_path(&app, &target)?;
+        if !target.is_file()
+            || target.extension().and_then(|extension| extension.to_str()) != Some("md")
+        {
+            return Err("Note path must point to a Markdown file".to_string());
+        }
+        let current = std::fs::read_to_string(&target).map_err(|error| error.to_string())?;
+        if current != expected_raw {
+            return Err(
+                "Save conflict: the file was modified outside HelixNotes since it was opened"
+                    .to_string(),
+            );
+        }
+        let raw = crate::vault::frontmatter::replace_body_keeping_frontmatter(&current, &body);
+        if raw != current {
+            operations::replace_file_atomically(&target, raw.as_bytes())?;
+        }
+        operations::read_note_content(&target, &path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn save_note(
     state: State<'_, AppState>,

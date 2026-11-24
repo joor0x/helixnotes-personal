@@ -290,6 +290,34 @@ pub fn merge_frontmatter(original_raw: &str, meta: &NoteMeta, body: &str) -> Str
     format!("---\n{}---\n{}", yaml_str, body_with_heading)
 }
 
+/// Byte offsets of a leading `---` frontmatter block: (YAML start, YAML end, body start).
+/// The closing fence is a line that is exactly `---`.
+fn frontmatter_fences(text: &str) -> Option<(usize, usize, usize)> {
+    let open_len = if text.starts_with("---\n") {
+        4
+    } else if text.starts_with("---\r\n") {
+        5
+    } else {
+        return None;
+    };
+    let mut offset = open_len;
+    for line in text[open_len..].split_inclusive('\n') {
+        if line.trim_end_matches(['\r', '\n']) == "---" {
+            return Some((open_len, offset, offset + line.len()));
+        }
+        offset += line.len();
+    }
+    None
+}
+
+/// Replace the Markdown body of a file the app does not own, keeping its frontmatter
+/// (and a BOM) byte for byte. No keys are added: external files stay as their author wrote them.
+pub fn replace_body_keeping_frontmatter(raw: &str, body: &str) -> String {
+    let bom = if raw.starts_with('\u{FEFF}') { 3 } else { 0 };
+    let prefix_len = frontmatter_fences(&raw[bom..]).map_or(0, |(_, _, body_start)| body_start);
+    format!("{}{body}", &raw[..bom + prefix_len])
+}
+
 /// Set (or with `None`, remove) the note's `lang` frontmatter key, keeping the body bytes
 /// and every other key. A `language` alias is replaced by `lang`. A note without
 /// frontmatter gets a minimal block only when a language is set.
@@ -298,27 +326,7 @@ pub fn set_frontmatter_language(raw: &str, language: Option<&str>) -> Result<Str
         Some(rest) => ("\u{FEFF}", rest),
         None => ("", raw),
     };
-    let open_len = if rest.starts_with("---\n") {
-        4
-    } else if rest.starts_with("---\r\n") {
-        5
-    } else {
-        0
-    };
-    // Closing fence: a line that is exactly `---`.
-    let block = (open_len > 0)
-        .then(|| {
-            let mut offset = open_len;
-            for line in rest[open_len..].split_inclusive('\n') {
-                if line.trim_end_matches(['\r', '\n']) == "---" {
-                    return Some((offset, offset + line.len()));
-                }
-                offset += line.len();
-            }
-            None
-        })
-        .flatten();
-    let Some((yaml_end, body_start)) = block else {
+    let Some((open_len, yaml_end, body_start)) = frontmatter_fences(rest) else {
         return Ok(match language {
             Some(language) => format!("---\nlang: {language}\n---\n{raw}"),
             None => raw.to_string(),
@@ -816,5 +824,28 @@ mod language_tests {
             "\u{FEFF}---\ntitle: T\nlang: en-GB\n---\nBody\r\n"
         );
         assert!(set_frontmatter_language("---\n: [bad\n---\nx", Some("ca")).is_err());
+    }
+}
+
+#[cfg(test)]
+mod external_body_tests {
+    use super::replace_body_keeping_frontmatter as replace;
+
+    #[test]
+    fn keeps_frontmatter_bytes_and_adds_nothing() {
+        assert_eq!(replace("# Old\n", "# New\n"), "# New\n");
+        assert_eq!(
+            replace(
+                "---\nauthor: me  # mine\nweird:   [a,b]\n---\nOld\n",
+                "New\n"
+            ),
+            "---\nauthor: me  # mine\nweird:   [a,b]\n---\nNew\n"
+        );
+        assert_eq!(
+            replace("\u{FEFF}---\r\nx: 1\r\n---\r\nOld", "New"),
+            "\u{FEFF}---\r\nx: 1\r\n---\r\nNew"
+        );
+        // An unclosed fence is body text, not frontmatter.
+        assert_eq!(replace("---\nnot closed\n", "New"), "New");
     }
 }

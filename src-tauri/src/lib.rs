@@ -144,12 +144,7 @@ pub fn run() {
                     };
                     if let Some(resolved_str) = resolved.to_str() {
                         if resolved.is_file() {
-                            let _ = app.fs_scope().allow_file(&resolved);
-                            if let Some(parent) = resolved.parent() {
-                                let _ = app.fs_scope().allow_directory(parent, true);
-                            }
-                            let _ =
-                                asset_scope::allow_external_note_assets(app.handle(), &resolved);
+                            asset_scope::allow_opened_markdown(app.handle(), &resolved);
                         }
                         let app_state = app.state::<AppState>();
                         if let Err(error) = app_state.enqueue_open_file(resolved_str.to_string()) {
@@ -205,6 +200,8 @@ pub fn run() {
             commands::move_notebook,
             commands::get_notes,
             commands::read_note,
+            commands::save_external_note,
+            commands::open_external_markdown,
             commands::save_note,
             commands::import_note,
             commands::create_note,
@@ -333,11 +330,7 @@ pub fn run() {
                 };
                 if let Some(resolved_str) = resolved.to_str() {
                     if resolved.is_file() {
-                        let _ = app.fs_scope().allow_file(&resolved);
-                        if let Some(parent) = resolved.parent() {
-                            let _ = app.fs_scope().allow_directory(parent, true);
-                        }
-                        let _ = asset_scope::allow_external_note_assets(app, &resolved);
+                        asset_scope::allow_opened_markdown(app, &resolved);
                     }
                     if let Err(error) = app
                         .state::<AppState>()

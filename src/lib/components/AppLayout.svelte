@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { t as ui } from '$lib/i18n';
-	import { message as showMessage } from '@tauri-apps/plugin-dialog';
+	import { message as showMessage, open as openDialog } from '@tauri-apps/plugin-dialog';
 	import { onMount, onDestroy, tick, untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { listen } from '@tauri-apps/api/event';
@@ -88,7 +88,7 @@
 		tabletNavHidden = hidden;
 		localStorage.setItem('helix-tablet-nav-hidden', hidden ? '1' : '0');
 	}
-	import { openVault, restoreExternalVault, loadVaultState, saveVaultState, readNote, deleteNote, createDailyNote, createBackup, getPendingOpenFile, ackPendingOpenFile, addQuickAccess, removeQuickAccess, getQuickAccess, setTheme, syncNow, setTaskDone, setTaskPriority, setTaskDue } from '$lib/api';
+	import { openVault, restoreExternalVault, loadVaultState, saveVaultState, readNote, deleteNote, createDailyNote, createBackup, getPendingOpenFile, ackPendingOpenFile, openExternalMarkdown, addQuickAccess, removeQuickAccess, getQuickAccess, setTheme, syncNow, setTaskDone, setTaskPriority, setTaskDue } from '$lib/api';
 	import { darkThemes, isAndroid, isMobile as isMobileTarget } from '$lib/platform';
 	import { openNoteWindow } from '$lib/utils/window';
 	import { normalizeStartupView, resolveStartupTarget } from '$lib/utils/startup-view';
@@ -453,6 +453,22 @@
 		} catch (error) {
 			console.error('Failed to open file:', error);
 			return false;
+		}
+	}
+
+	/** Pick any .md on disk; it opens in place (viewer, then "Edit") without importing. */
+	async function chooseMarkdownFile() {
+		try {
+			const selected = await openDialog({
+				multiple: false,
+				directory: false,
+				filters: [{ name: 'Markdown', extensions: ['md'] }]
+			});
+			if (typeof selected !== 'string' || !ownerIsCurrent()) return;
+			const path = await openExternalMarkdown(selected);
+			if (ownerIsCurrent()) await handleOpenFile(path);
+		} catch (error) {
+			console.error('Failed to open Markdown file:', error);
 		}
 	}
 
@@ -978,6 +994,9 @@
 				case 'quick-open':
 					$showCommandPalette = true;
 					return;
+				case 'open-file':
+					if (!isMobile) void chooseMarkdownFile();
+					return;
 				case 'save':
 					editor?.forceSave();
 					return;
@@ -999,7 +1018,7 @@
 					$focusMode = !$focusMode;
 					return;
 				case 'toggle-readonly':
-					if ($viewerNote) return; // viewer mode is always read-only
+					if ($viewerNote) return; // external files switch to editing from their banner
 					$readOnly = !$readOnly;
 					return;
 				case 'fullscreen':
@@ -1081,7 +1100,7 @@
 			}
 			if ($activeNote !== openingNote || content.raw === openingNote.raw) return;
 			$activeNote = content;
-			if ($viewerNote?.path === path) $viewerNote = { path, content: content.content };
+			if ($viewerNote?.path === path) $viewerNote = { ...$viewerNote, path, content: content.content };
 			editor?.loadNote(path, content.content);
 		} catch (error) {
 			if ($mcpBusy) return;
@@ -1569,7 +1588,7 @@
 		<div class="app-layout">
 			{#if !$focusMode}
 				<div class="sidebar-panel" style="width: {$sidebarCollapsed ? 44 : $sidebarWidth}px">
-					<Sidebar bind:this={sidebar} onViewChanged={handleViewChanged} onBeforeNoteChange={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} />
+					<Sidebar bind:this={sidebar} onViewChanged={handleViewChanged} onBeforeNoteChange={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} onOpenFile={chooseMarkdownFile} />
 				</div>
 
 				{#if !$sidebarCollapsed}

@@ -163,6 +163,16 @@ export async function readNote(vaultPath: string, path: string): Promise<NoteCon
   return invoke("read_note", { vaultPath, path });
 }
 
+/** Confirm a file picked in the open dialog and grant its folder for relative assets. */
+export async function openExternalMarkdown(path: string): Promise<string> {
+  return invoke("open_external_markdown", { path });
+}
+
+/** Write the body of a file outside the vault back in place, keeping its frontmatter. */
+export async function saveExternalNote(vaultPath: string, path: string, body: string, expectedRaw: string): Promise<NoteContent> {
+  return invoke("save_external_note", { vaultPath, path, body, expectedRaw });
+}
+
 export async function saveNote(
   vaultPath: string,
   path: string,

@@ -25,6 +25,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "new-note", label: "New note", group: "General", default: { mod: true, code: "KeyN" } },
   { id: "save", label: "Save", group: "General", default: { mod: true, code: "KeyS" } },
   { id: "quick-open", label: "Quick open", group: "General", default: { mod: true, code: "KeyP" } },
+  { id: "open-file", label: "Open Markdown file", group: "General", default: { mod: true, code: "KeyO" } },
   { id: "find-in-note", label: "Find in note", group: "General", default: { mod: true, code: "KeyF" } },
   // Cmd+H hides the application on macOS.
   { id: "replace-in-note", label: "Replace in note", group: "General", default: isMac ? { mod: true, alt: true, code: "KeyF" } : { mod: true, code: "KeyH" } },
