@@ -629,10 +629,11 @@ export async function setAiSettings(
   ollamaApiKey: string | null = null,
   openaiCompatibleBaseUrl: string | null = null,
   openaiCompatibleApiKey: string | null = null,
+  cliPath: string | null = null,
 ): Promise<void> {
   return invoke("set_ai_settings", {
     provider, apiKey, model, writingStyle, baseUrl,
-    ollamaApiKey, openaiCompatibleBaseUrl, openaiCompatibleApiKey,
+    ollamaApiKey, openaiCompatibleBaseUrl, openaiCompatibleApiKey, cliPath,
   });
 }
 

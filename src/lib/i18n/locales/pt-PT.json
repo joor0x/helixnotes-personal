@@ -1215,5 +1215,11 @@
   "mcp.failed": "MCP: {error}",
   "mcp.confirmWrite": "Permitir que o cliente MCP edite notas em «{vault}»? Poderá alterar texto, títulos, etiquetas e fixações. As alterações usam a gravação e o histórico normais; rascunhos não guardados bloqueiam-nas. Continue apenas se confiar neste cliente.",
   "mcp.applying": "A aplicar uma alteração MCP…",
-  "mcp.chooseVault": "Escolher cofre"
+  "mcp.chooseVault": "Escolher cofre",
+  "ai.cliProvidersHint": "Claude Code, Codex and Gemini CLI use the CLI installed and signed in on this computer. Text only; images are not sent.",
+  "ai.cliPrivacy": "Your selected text is sent to {name} through its CLI, which forwards it to the provider's servers with your CLI account.",
+  "ai.cliPath": "CLI path",
+  "ai.cliPathPlaceholder": "Detected automatically ({binary})",
+  "ai.cliPathHint": "Leave empty to find `{binary}` in PATH and common install folders. Sign in once in a terminal before using it here.",
+  "ai.cliModelHint": "Leave empty to use the CLI's default model."
 }

@@ -293,6 +293,12 @@ pub struct AppConfig {
     pub openai_model: Option<String>,
     pub ollama_model: Option<String>,
     pub openai_compatible_model: Option<String>,
+    /// Optional absolute executable path per CLI provider (`claude_cli`, ...).
+    #[serde(default)]
+    pub ai_cli_paths: std::collections::BTreeMap<String, String>,
+    /// Remembered model per CLI provider; empty means the CLI's own default.
+    #[serde(default)]
+    pub ai_cli_models: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub ai_writing_style: Option<String>,
     #[serde(default)]
@@ -437,6 +443,8 @@ impl Default for AppConfig {
             openai_model: None,
             ollama_model: None,
             openai_compatible_model: None,
+            ai_cli_paths: Default::default(),
+            ai_cli_models: Default::default(),
             ai_writing_style: None,
             default_view_mode: false,
             new_notes_in_source_mode: false,

@@ -161,6 +161,8 @@ export interface AppConfig {
   openai_model?: string | null;
   ollama_model?: string | null;
   openai_compatible_model?: string | null;
+  ai_cli_paths?: Record<string, string>;
+  ai_cli_models?: Record<string, string>;
   ai_writing_style: string | null;
   default_view_mode: boolean;
   new_notes_in_source_mode: boolean;

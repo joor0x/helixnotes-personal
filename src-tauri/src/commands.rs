@@ -4227,6 +4227,7 @@ pub fn set_ai_settings(
     ollama_api_key: Option<String>,
     openai_compatible_base_url: Option<String>,
     openai_compatible_api_key: Option<String>,
+    cli_path: Option<String>,
 ) -> Result<(), String> {
     let mut current = state.config.lock().map_err(|e| e.to_string())?;
     let mut config = current.clone();
@@ -4254,6 +4255,22 @@ pub fn set_ai_settings(
             config.openai_compatible_api_key = openai_compatible_api_key.filter(|k| !k.is_empty());
         }
         Some("anthropic") => config.ai_api_key = key,
+        Some(p) if crate::ai::cli::is_cli_provider(p) => {
+            let path = cli_path
+                .map(|path| path.trim().to_string())
+                .filter(|path| !path.is_empty());
+            match path {
+                Some(path) if path.len() > 4096 => {
+                    return Err("AI settings exceed the size limit".into())
+                }
+                Some(path) => {
+                    config.ai_cli_paths.insert(p.to_string(), path);
+                }
+                None => {
+                    config.ai_cli_paths.remove(p);
+                }
+            }
+        }
         None => {} // Turning AI off must not erase saved credentials.
         _ => return Err("Unsupported AI provider".into()),
     }
@@ -4263,6 +4280,14 @@ pub fn set_ai_settings(
         Some("anthropic") => config.anthropic_model = remembered,
         Some("ollama") => config.ollama_model = remembered,
         Some("openai_compatible") => config.openai_compatible_model = remembered,
+        Some(p) if crate::ai::cli::is_cli_provider(p) => match remembered {
+            Some(model) => {
+                config.ai_cli_models.insert(p.to_string(), model);
+            }
+            None => {
+                config.ai_cli_models.remove(p);
+            }
+        },
         _ => {}
     }
     config.ai_provider = provider;
@@ -4283,6 +4308,7 @@ pub fn test_ai_connection(app: AppHandle) -> Result<(), String> {
             .clone()
             .ok_or("AI is disabled. Choose a provider in Settings.")?;
         let key = match provider.as_str() {
+            p if crate::ai::cli::is_cli_provider(p) => Some(String::new()),
             "ollama" => Some(config.ollama_api_key.clone().unwrap_or_default()),
             "openai_compatible" => {
                 Some(config.openai_compatible_api_key.clone().unwrap_or_default())
@@ -4293,16 +4319,19 @@ pub fn test_ai_connection(app: AppHandle) -> Result<(), String> {
         .ok_or("No API key configured")?;
         let model = config.ai_model.clone();
         let base_url = match provider.as_str() {
+            p if crate::ai::cli::is_cli_provider(p) => config.ai_cli_paths.get(p).cloned(),
             "openai_compatible" => config.openai_compatible_base_url.clone(),
             _ => config.ollama_base_url.clone(),
         };
         (provider, key, model, base_url)
     };
-    if model.trim().is_empty()
-        || !matches!(
-            provider.as_str(),
-            "openai" | "anthropic" | "ollama" | "openai_compatible"
-        )
+    let is_cli = crate::ai::cli::is_cli_provider(&provider);
+    if (model.trim().is_empty() && !is_cli)
+        || !(is_cli
+            || matches!(
+                provider.as_str(),
+                "openai" | "anthropic" | "ollama" | "openai_compatible"
+            ))
     {
         return Err("Choose an AI provider and model in Settings".into());
     }
@@ -4572,6 +4601,7 @@ pub async fn ai_ask(
             .clone()
             .ok_or("AI is disabled. Choose a provider in Settings.")?;
         let key = match provider.as_str() {
+            p if crate::ai::cli::is_cli_provider(p) => Some(String::new()),
             "ollama" => Some(config.ollama_api_key.clone().unwrap_or_default()),
             "openai_compatible" => {
                 Some(config.openai_compatible_api_key.clone().unwrap_or_default())
@@ -4583,6 +4613,7 @@ pub async fn ai_ask(
         let model = config.ai_model.clone();
         let style = config.ai_writing_style.clone();
         let base_url = match provider.as_str() {
+            p if crate::ai::cli::is_cli_provider(p) => config.ai_cli_paths.get(p).cloned(),
             "openai_compatible" => config.openai_compatible_base_url.clone(),
             _ => config.ollama_base_url.clone(),
         };
@@ -4590,7 +4621,8 @@ pub async fn ai_ask(
     };
 
     if let Some(expected) = expected_config {
-        let relevant_base = matches!(provider.as_str(), "ollama" | "openai_compatible");
+        let relevant_base = matches!(provider.as_str(), "ollama" | "openai_compatible")
+            || crate::ai::cli::is_cli_provider(&provider);
         if expected.provider.as_deref() != Some(provider.as_str())
             || expected.model != model
             || (relevant_base && expected.base_url != base_url)
@@ -4602,14 +4634,21 @@ pub async fn ai_ask(
     } else if image_context.is_some() {
         return Err("Confirm the AI destination before including images".into());
     }
-    if model.trim().is_empty() {
+    let is_cli = crate::ai::cli::is_cli_provider(&provider);
+    // CLI providers fall back to the CLI's configured default model.
+    if model.trim().is_empty() && !is_cli {
         return Err("Choose an AI model in Settings before starting".into());
     }
-    if !matches!(
-        provider.as_str(),
-        "openai" | "anthropic" | "ollama" | "openai_compatible"
-    ) {
+    if !is_cli
+        && !matches!(
+            provider.as_str(),
+            "openai" | "anthropic" | "ollama" | "openai_compatible"
+        )
+    {
         return Err("Unsupported AI provider".into());
+    }
+    if is_cli && image_context.is_some() {
+        return Err("CLI providers accept text only. Uncheck the images and try again.".into());
     }
     let images = if let Some(context) = image_context {
         let state = app.state::<AppState>();

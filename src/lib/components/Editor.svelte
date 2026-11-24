@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { t as ui, label as uiLabel, tr as uiText, locale, setUiText, setUiLabel } from '$lib/i18n';
 	import AiImageOptions from './AiImageOptions.svelte';
+	import { isCliProvider } from '$lib/ai-cli';
 	import { aiImageCandidates, protectAiMedia, restoreAiMedia, type AiImageCandidate } from '$lib/utils/ai-media';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { get } from 'svelte/store';
@@ -6997,7 +6998,7 @@
 			const provider = $appConfig?.ai_provider ?? null;
 			await aiAsk(action, selectedText, customPrompt ?? null, requestId,
 				paths.length ? { vaultPath: origin.vault!, notePath: origin.path!, paths } : null,
-				{ provider, model: $appConfig?.ai_model ?? '', baseUrl: provider === 'ollama' ? $appConfig?.ollama_base_url ?? null : provider === 'openai_compatible' ? $appConfig?.openai_compatible_base_url ?? null : null });
+				{ provider, model: $appConfig?.ai_model ?? '', baseUrl: provider === 'ollama' ? $appConfig?.ollama_base_url ?? null : provider === 'openai_compatible' ? $appConfig?.openai_compatible_base_url ?? null : isCliProvider(provider) && provider ? $appConfig?.ai_cli_paths?.[provider] ?? null : null });
 		} catch (e) {
 			stop?.();
 			if (!current()) return;
@@ -9426,7 +9427,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="ai-menu-overlay" class:mobile={isMobile} onclick={(e) => closeFromOverlay(e, closeAiMenu)} onkeydown={(e) => closeOnEscape(e, closeAiMenu)}>
 		<div class="ai-menu" class:mobile={isMobile} style={isMobile ? '' : `left: clamp(8px, ${aiMenu.x}px, calc(100vw - min(480px, calc(100vw - 16px)) - 8px)); top: clamp(8px, ${aiMenu.y}px, calc(20vh - 8px))`}>
-			{#if aiResult === null && !aiLoading}
+			{#if aiResult === null && !aiLoading && !isCliProvider($appConfig?.ai_provider)}
 				<AiImageOptions images={aiImages} bind:selected={aiSelectedImages} destination={aiDestination} />
 			{/if}
 			{#if aiResult !== null || aiLoading}

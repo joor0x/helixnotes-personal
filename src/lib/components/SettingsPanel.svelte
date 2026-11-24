@@ -9,6 +9,7 @@
 	import { newNoteEditorMode, type EditorMode } from '$lib/editor/mode';
 	import { setNewNoteEditorMode } from '$lib/api';
 	import AiModelPicker from './AiModelPicker.svelte';
+	import { AI_CLI_PROVIDERS, isCliProvider, cliProviderInfo } from '$lib/ai-cli';
 	import { showSettings, syncState, theme, resolvedTheme, appConfig, platformIsMobile, activeVaultConfig, updateAvailable as globalUpdateAvailable, updateObj as globalUpdateObj, installType, settingsTab, vaultReady, androidApkUrl, checkForUpdateMobile, notebookSortMode, isManagedInstall, customThemes } from '$lib/stores/app';
 	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setSyncSettings, testSyncConnection, syncNow, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments } from '$lib/api';
 	import { darkThemes, isMobile, isAndroid } from '$lib/platform';
@@ -387,7 +388,7 @@
 	let aiProvider = $state<string | null>($appConfig?.ai_provider ?? null);
 	let aiApiKey = $derived.by(() => {
 		if (aiProvider === 'openai') return _openaiKey;
-		if (aiProvider === 'ollama') return '';
+		if (aiProvider === 'ollama' || isCliProvider(aiProvider)) return '';
 		if (aiProvider === 'openai_compatible') return _openaiCompatibleKey;
 		return _anthropicKey;
 	});
@@ -397,6 +398,7 @@
 	let _ollamaApiKey = $state($appConfig?.ollama_api_key ?? '');
 	let _openaiCompatibleBaseUrl = $state($appConfig?.openai_compatible_base_url ?? '');
 	let _openaiCompatibleKey = $state($appConfig?.openai_compatible_api_key ?? '');
+	let _cliPaths = $state<Record<string, string>>({ ...($appConfig?.ai_cli_paths ?? {}) });
 	let aiModel = $state($appConfig?.ai_model ?? '');
 	let aiWritingStyle = $state($appConfig?.ai_writing_style ?? '');
 	let aiShowKey = $state(false);
@@ -409,6 +411,7 @@
 	const rememberedModels = new Map<string, string>([
 		['anthropic', initialAi?.anthropic_model ?? ''], ['openai', initialAi?.openai_model ?? ''],
 		['ollama', initialAi?.ollama_model ?? ''], ['openai_compatible', initialAi?.openai_compatible_model ?? ''],
+		...AI_CLI_PROVIDERS.map(cli => [cli.id, initialAi?.ai_cli_models?.[cli.id] ?? ''] as [string, string]),
 	]);
 	if (initialAi?.ai_provider) rememberedModels.set(initialAi.ai_provider, initialAi.ai_model);
 	let aiSaveQueue: Promise<void> = Promise.resolve();
@@ -420,8 +423,9 @@
 		const style = aiWritingStyle || null, base = _ollamaBaseUrl || null;
 		const ollamaKey = _ollamaApiKey.trim() || null;
 		const compatibleUrl = _openaiCompatibleBaseUrl || null, compatibleKey = _openaiCompatibleKey.trim() || null;
+		const cli = isCliProvider(p), cliPath = cli && p ? (_cliPaths[p] ?? '').trim() || null : null;
 		const save = aiSaveQueue.catch(() => {}).then(async () => {
-			await setAiSettings(p, key, model, style, p === 'ollama' ? base : null, ollamaKey, compatibleUrl, compatibleKey);
+			await setAiSettings(p, key, model, style, p === 'ollama' ? base : null, ollamaKey, compatibleUrl, compatibleKey, cliPath);
 			if (p) rememberedModels.set(p, model);
 			appConfig.update(config => config ? {
 				...config, ai_provider: p, ai_model: model, ai_writing_style: style,
@@ -429,12 +433,22 @@
 				...(p === 'anthropic' ? { ai_api_key: key, anthropic_model: model || null } : {}),
 				...(p === 'ollama' ? { ollama_base_url: base, ollama_api_key: ollamaKey, ollama_model: model || null } : {}),
 				...(p === 'openai_compatible' ? { openai_compatible_base_url: compatibleUrl, openai_compatible_api_key: compatibleKey, openai_compatible_model: model || null } : {}),
+				...(cli && p ? {
+					ai_cli_paths: withEntry(config.ai_cli_paths, p, cliPath),
+					ai_cli_models: withEntry(config.ai_cli_models, p, model || null),
+				} : {}),
 			} : config);
 		});
 		aiSaveQueue = save;
 		// Keep fire-and-forget blur handlers from producing unhandled rejections.
 		void save.catch(error => { aiTestMessage = { type: 'error', text: String(error) }; });
 		return save;
+	}
+
+	function withEntry(map: Record<string, string> | undefined, key: string, value: string | null) {
+		const next = { ...(map ?? {}) };
+		if (value) next[key] = value; else delete next[key];
+		return next;
 	}
 
 	function selectAiProvider(next: string | null) {
@@ -2369,17 +2383,41 @@
 									<button class="option-btn" class:active={aiProvider === 'anthropic'} onclick={() => selectAiProvider('anthropic')}>{$ui("ui.anthropic")}</button>
 									<button class="option-btn" class:active={aiProvider === 'openai'} onclick={() => selectAiProvider('openai')}>{$ui("ui.openai")}</button>
 									<button class="option-btn" class:active={aiProvider === 'openai_compatible'} onclick={() => selectAiProvider('openai_compatible')}>{$ui("ui.openai_compatible")}</button>
+									{#if !isMobile}
+										{#each AI_CLI_PROVIDERS as cli (cli.id)}
+											<button class="option-btn" class:active={aiProvider === cli.id} onclick={() => selectAiProvider(cli.id)}>{cli.label}</button>
+										{/each}
+									{/if}
 								</div>
+								{#if !isMobile}
+									<p class="setting-hint">{$ui("ai.cliProvidersHint")}</p>
+								{/if}
 							</div>
 
 							{#if aiProvider}
-								{#if aiProvider === 'ollama' || aiProvider === 'openai_compatible'}
+								{#if isCliProvider(aiProvider)}
+									<p class="setting-hint" style="color: var(--text-warning, #f59e0b); margin-top: -4px; margin-bottom: 12px;">{$ui("ai.cliPrivacy", { name: cliProviderInfo(aiProvider)?.label ?? '' })}</p>
+								{:else if aiProvider === 'ollama' || aiProvider === 'openai_compatible'}
 									<p class="setting-hint" style="color: var(--text-success, #4ade80); margin-top: -4px; margin-bottom: 12px;">{$t('ai.serverPrivacy')}</p>
 								{:else}
 									<p class="setting-hint" style="color: var(--text-warning, #f59e0b); margin-top: -4px; margin-bottom: 12px;">{$ui("ui.your_selected_text_and_note_content_will_be_sent_to_servers_fo_becb17", { value0: aiProvider === 'openai' ? 'OpenAI' : 'Anthropic' })}</p>
 								{/if}
 
-								{#if aiProvider === 'ollama'}
+								{#if isCliProvider(aiProvider)}
+									{@const cli = cliProviderInfo(aiProvider)!}
+									<div class="settings-section">
+										<h3>{$ui("ai.cliPath")} <span style="font-weight: 400; text-transform: none; font-size: 11px;">{$ui("ui.optional")}</span></h3>
+										<input
+											type="text"
+											class="ai-key-input"
+											placeholder={$ui("ai.cliPathPlaceholder", { binary: cli.binary })}
+											value={_cliPaths[cli.id] ?? ''}
+											oninput={(e) => { _cliPaths = { ..._cliPaths, [cli.id]: (e.target as HTMLInputElement).value }; }}
+											onblur={saveAiSettings}
+										/>
+										<p class="setting-hint">{$ui("ai.cliPathHint", { binary: cli.binary })}</p>
+									</div>
+								{:else if aiProvider === 'ollama'}
 									<div class="settings-section">
 										<h3>{$ui("ui.server_url")}</h3>
 										<input
@@ -2474,8 +2512,18 @@
 								{/if}
 
 								<div class="settings-section">
-									<h3>{$ui("ui.model")}</h3>
-									{#if aiProvider === 'ollama' || aiProvider === 'openai_compatible'}
+									<h3>{$ui("ui.model")}{#if isCliProvider(aiProvider)} <span style="font-weight: 400; text-transform: none; font-size: 11px;">{$ui("ui.optional")}</span>{/if}</h3>
+									{#if isCliProvider(aiProvider)}
+										<input
+											type="text"
+											class="ai-key-input"
+											placeholder={cliProviderInfo(aiProvider)?.modelHint ?? ''}
+											value={aiModel}
+											oninput={(e) => { aiModel = (e.target as HTMLInputElement).value; }}
+											onblur={saveAiSettings}
+										/>
+										<p class="setting-hint">{$ui("ai.cliModelHint")}</p>
+									{:else if aiProvider === 'ollama' || aiProvider === 'openai_compatible'}
 										<input
 											type="text"
 											class="ai-key-input"
@@ -2505,7 +2553,7 @@
 
 								<div class="settings-section">
 									<h3>{$ui("ui.connection")}</h3>
-									<button class="import-btn" onclick={handleTestAi} disabled={aiTestLoading || !aiModel.trim() || (aiProvider === 'openai_compatible' && !_openaiCompatibleBaseUrl) || (aiProvider !== 'ollama' && aiProvider !== 'openai_compatible' && !aiApiKey)}>
+									<button class="import-btn" onclick={handleTestAi} disabled={aiTestLoading || (!isCliProvider(aiProvider) && (!aiModel.trim() || (aiProvider === 'openai_compatible' && !_openaiCompatibleBaseUrl) || (aiProvider !== 'ollama' && aiProvider !== 'openai_compatible' && !aiApiKey)))}>
 										{#if aiTestLoading}
 											<svg class="spinner-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" opacity="0.25" /><path d="M12 2a10 10 0 019.95 9" /></svg>
 											{$ui("ui.testing")}

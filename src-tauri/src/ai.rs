@@ -3,6 +3,7 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter};
 
 use crate::types::AiStreamEvent;
+pub mod cli;
 pub mod images;
 pub mod models;
 use images::AiImage;
@@ -38,6 +39,21 @@ async fn receive_stream(
         },
     );
     Ok(())
+}
+
+/// Emit a complete, already validated answer as one text event followed by `done`.
+fn emit_complete(app: &AppHandle, request_id: &str, text: String) {
+    for (event_type, text) in [("text", Some(text)), ("done", None)] {
+        let _ = app.emit(
+            "ai-stream",
+            AiStreamEvent {
+                request_id: request_id.to_owned(),
+                event_type: event_type.into(),
+                text,
+                error: None,
+            },
+        );
+    }
 }
 
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -91,6 +107,24 @@ pub fn ai_request(
                 Some(api_key.as_str())
             };
             let result = match provider.as_str() {
+                // For CLI providers `base_url` carries the optional executable path override.
+                p if cli::is_cli_provider(p) => {
+                    match cli::run(
+                        p,
+                        base_url.as_deref(),
+                        &model,
+                        &system_prompt,
+                        &user_message,
+                    )
+                    .await
+                    {
+                        Ok(text) => {
+                            emit_complete(&app, &request_id, text);
+                            Ok(())
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
                 "openai" => {
                     stream_openai(
                         &app,
@@ -310,6 +344,16 @@ pub async fn test_connection(
         Some(api_key)
     };
     match provider {
+        p if cli::is_cli_provider(p) => {
+            cli::run(
+                p,
+                base_url,
+                model,
+                "Reply with exactly: OK",
+                "Connection test from HelixNotes.",
+            )
+            .await
+        }
         "openai" => test_openai(OPENAI_API_URL, Some(api_key), model).await,
         "ollama" => {
             let url = base_url.unwrap_or(OLLAMA_DEFAULT_URL);

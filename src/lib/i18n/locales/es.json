@@ -1215,5 +1215,11 @@
   "mcp.failed": "MCP: {error}",
   "mcp.confirmWrite": "¿Permitir que tu cliente MCP edite notas en «{vault}»? Podrá cambiar texto, títulos, etiquetas y elementos fijados. Se usan el guardado y el historial normales; los borradores sin guardar bloquean los cambios. Continúa solo si confías en este cliente.",
   "mcp.applying": "Aplicando un cambio MCP…",
-  "mcp.chooseVault": "Elegir bóveda"
+  "mcp.chooseVault": "Elegir bóveda",
+  "ai.cliProvidersHint": "Claude Code, Codex y Gemini CLI usan la CLI instalada y con sesión iniciada en este equipo. Solo texto; no se envían imágenes.",
+  "ai.cliPrivacy": "El texto seleccionado se envía a {name} mediante su CLI, que lo reenvía a los servidores del proveedor con tu cuenta de la CLI.",
+  "ai.cliPath": "Ruta de la CLI",
+  "ai.cliPathPlaceholder": "Detección automática ({binary})",
+  "ai.cliPathHint": "Déjalo vacío para buscar `{binary}` en el PATH y en las carpetas de instalación habituales. Inicia sesión una vez en una terminal antes de usarla aquí.",
+  "ai.cliModelHint": "Déjalo vacío para usar el modelo por defecto de la CLI."
 }
