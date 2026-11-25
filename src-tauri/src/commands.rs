@@ -4944,6 +4944,8 @@ pub(crate) fn app_config_path() -> Result<std::path::PathBuf, String> {
     // the platform config dir on desktop.
     let app_dir = if let Some(mobile_dir) = MOBILE_CONFIG_DIR.get() {
         mobile_dir.join("helixnotes")
+    } else if let Some(portable_dir) = crate::portable::data_dir() {
+        portable_dir
     } else if let Some(config_dir) = dirs::config_dir() {
         config_dir.join("helixnotes")
     } else {
@@ -4973,8 +4975,11 @@ fn read_app_config(path: &Path) -> AppConfig {
     let Ok(text) = std::fs::read_to_string(path) else {
         return AppConfig::default();
     };
-    match serde_json::from_str(&text) {
-        Ok(config) => config,
+    match serde_json::from_str::<AppConfig>(&text) {
+        Ok(mut config) => {
+            crate::portable::map_config_paths(&mut config, crate::portable::resolve_stored);
+            config
+        }
         Err(error) => {
             if !text.trim().is_empty() {
                 keep_unreadable_config(path, &text, &error.to_string());
@@ -5120,7 +5125,14 @@ fn save_app_config(config: &AppConfig) -> Result<(), String> {
 }
 
 pub(crate) fn save_app_config_to(config: &AppConfig, path: &Path) -> Result<(), String> {
-    let data = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
+    let data = if crate::portable::is_active() {
+        let mut stored = config.clone();
+        crate::portable::map_config_paths(&mut stored, crate::portable::to_stored);
+        serde_json::to_string_pretty(&stored)
+    } else {
+        serde_json::to_string_pretty(config)
+    }
+    .map_err(|e| e.to_string())?;
     write_private_file(path, data.as_bytes())?;
     Ok(())
 }
@@ -5149,6 +5161,11 @@ pub fn get_install_type() -> String {
     // in the iOS sandbox. Return early.
     if cfg!(mobile) {
         return "mobile".to_string();
+    }
+
+    // A portable copy must not replace itself through the updater.
+    if crate::portable::is_active() {
+        return "portable".to_string();
     }
 
     if cfg!(target_os = "macos") {

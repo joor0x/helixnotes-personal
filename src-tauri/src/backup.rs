@@ -91,10 +91,15 @@ fn excluded_path(path: &Path, vault: &Path, backup_dir: &Path, attachments: bool
     })
 }
 
-/// Returns the default backup directory (~/.config/helixnotes/backups/)
+/// Returns the default backup directory (~/.config/helixnotes/backups/, or data/backups/ when portable)
 pub fn default_backup_dir() -> Result<PathBuf, String> {
-    let config_dir = dirs::config_dir().ok_or("Cannot find config directory")?;
-    let dir = config_dir.join("helixnotes").join("backups");
+    let dir = match crate::portable::data_dir() {
+        Some(portable_dir) => portable_dir.join("backups"),
+        None => dirs::config_dir()
+            .ok_or("Cannot find config directory")?
+            .join("helixnotes")
+            .join("backups"),
+    };
     if !dir.exists() {
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     }

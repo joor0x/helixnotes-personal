@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 const openNoteWindows = new Map<string, string>();
@@ -18,25 +19,18 @@ export async function openNoteWindow(vaultPath: string, notePath: string, noteTi
 	const label = `note-${crypto.randomUUID()}`;
 	const url = `/?note=${encodeURIComponent(notePath)}&vault=${encodeURIComponent(vaultPath)}`;
 
-	const noteWindow = new WebviewWindow(label, {
-		url,
-		title: `${noteTitle} - HelixNotes`,
-		width: 900,
-		height: 700,
-		minWidth: 500,
-		minHeight: 400,
-		decorations: false,
-		center: true
-	});
-
-	openNoteWindows.set(notePath, label);
-
-	noteWindow.once('tauri://destroyed', () => {
-		openNoteWindows.delete(notePath);
-	});
-
-	noteWindow.once('tauri://error', (e) => {
+	// Created in Rust so a portable install keeps the window's webview data next to the app.
+	try {
+		await invoke('open_note_window', { label, url, title: `${noteTitle} - HelixNotes` });
+	} catch (e) {
 		console.error('Failed to create note window:', e);
+		return;
+	}
+
+	const noteWindow = await WebviewWindow.getByLabel(label);
+	if (!noteWindow) return;
+	openNoteWindows.set(notePath, label);
+	noteWindow.once('tauri://destroyed', () => {
 		openNoteWindows.delete(notePath);
 	});
 }

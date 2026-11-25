@@ -1,6 +1,6 @@
 # Building and running HelixNotes Personal
 
-How to run this fork locally and produce packages for Linux and Android.
+How to run this fork locally and produce packages for Linux, Windows (portable) and Android.
 Commands assume Ubuntu/Debian; adapt package names for other distros.
 
 ## Why fork builds differ from upstream
@@ -68,6 +68,58 @@ Building the AppImage downloads `linuxdeploy` on first run, so it needs network 
 Install the `.deb` with `sudo apt install ./HelixNotes_<version>_amd64.deb`.
 
 Alternative: `nix build` uses `flake.nix`, which also disables the updater.
+
+## Portable mode (Windows and Linux)
+
+A portable copy runs without installing and keeps all its state in a `data/` folder
+next to the executable: `config.json` (settings and vault list), default backups,
+the search index, the webview's `localStorage` and the window size and position.
+Nothing goes to `%APPDATA%`, `%LOCALAPPDATA%`, `~/.config` or `~/.local/share`.
+
+Portable mode is on when any of these holds:
+
+- the build was made with `HELIXNOTES_INSTALL_TYPE=portable` (the Windows zip is);
+- a file named `portable` sits next to the executable, or next to the `.AppImage`;
+- the `HELIXNOTES_PORTABLE_DIR` environment variable names the folder to use.
+
+Vault and folder paths inside the portable folder are saved relative to it, so a
+copy on a USB drive keeps finding its vaults when the drive gets another letter.
+Paths outside it stay absolute. A portable copy never runs the in-app updater.
+
+The portable copy and an installed HelixNotes share the single-instance lock:
+while one is open, starting the other only brings the open one to the front.
+
+### Windows
+
+The `Windows portable build` GitHub Actions workflow
+(`.github/workflows/windows-portable.yml`) builds `HelixNotes.exe` and uploads
+`HelixNotes_<version>_windows_x64_portable.zip` as a workflow artifact. It runs on
+every push to `main`, on pull requests and on demand from the Actions tab. Pushing a `fork-v*` tag
+(for example `fork-v1.3.8`) also publishes the zip as a GitHub release.
+
+To build it on a Windows machine instead, install Rust, Node.js 22 and the
+[Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/#windows),
+then in PowerShell:
+
+```powershell
+corepack enable
+pnpm install
+$env:HELIXNOTES_INSTALL_TYPE = "portable"
+pnpm tauri build --no-bundle --config src-tauri/tauri.fork.conf.json
+```
+
+The exe is `src-tauri\target\release\helixnotes.exe`.
+
+The exe needs the WebView2 runtime. Windows 11 always ships it and up-to-date
+Windows 10 does too. The zip does not bundle it.
+
+### Linux
+
+Build the AppImage as above and put an empty file named `portable` next to it:
+
+```bash
+touch portable   # in the folder that holds HelixNotes_<version>_amd64.AppImage
+```
 
 ## Android
 

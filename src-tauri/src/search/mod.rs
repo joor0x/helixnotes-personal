@@ -36,12 +36,17 @@ const TARGET_CONTEXT_CHARS: usize = 32;
 fn vault_index_base(vault_path: &str) -> Option<std::path::PathBuf> {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
-    hasher.update(vault_path.as_bytes());
+    // Hash the stored form so a portable vault keeps its index when the drive letter changes.
+    hasher.update(crate::portable::to_stored(vault_path).as_bytes());
     let key: String = hasher.finalize()[..8]
         .iter()
         .map(|b| format!("{:02x}", b))
         .collect();
-    dirs::data_local_dir().map(|d| d.join("helixnotes").join("search").join(key))
+    let base = match crate::portable::data_dir() {
+        Some(portable_dir) => portable_dir,
+        None => dirs::data_local_dir()?.join("helixnotes"),
+    };
+    Some(base.join("search").join(key))
 }
 
 /// True for characters in the CJK / Japanese / Korean blocks, which are written

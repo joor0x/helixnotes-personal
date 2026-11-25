@@ -9,6 +9,7 @@ mod image_proxy;
 mod languagetool;
 #[cfg(desktop)]
 pub mod mcp;
+mod portable;
 mod reminders;
 mod search;
 mod search_folders;
@@ -85,6 +86,8 @@ pub fn run() {
             let _ = (webview, payload);
         })
         .setup(move |app| {
+            #[cfg(desktop)]
+            portable::create_main_window(app.handle())?;
             #[cfg(desktop)]
             mcp::McpRuntime::install(app.handle());
             #[cfg(desktop)]
@@ -296,6 +299,8 @@ pub fn run() {
             commands::test_sync_connection,
             commands::sync_now,
             commands::get_install_type,
+            #[cfg(desktop)]
+            portable::open_note_window,
             commands::is_mobile_platform,
             commands::get_pending_open_file,
             commands::ack_pending_open_file,
@@ -373,6 +378,10 @@ pub fn run() {
                 | tauri_plugin_window_state::StateFlags::DECORATIONS
                 | tauri_plugin_window_state::StateFlags::FULLSCREEN,
         );
+        let window_state_builder = match portable::window_state_file() {
+            Some(file) => window_state_builder.with_filename(file.to_string_lossy()),
+            None => window_state_builder,
+        };
         builder = builder.plugin(window_state_builder.build());
 
         builder = builder.on_window_event(move |window, event| {
@@ -402,8 +411,12 @@ pub fn run() {
         });
     }
 
+    #[allow(unused_mut)]
+    let mut context = tauri::generate_context!();
+    #[cfg(desktop)]
+    portable::defer_main_window(&mut context);
     let app = builder
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application");
     app.run(|app, event| {
         #[cfg(desktop)]
