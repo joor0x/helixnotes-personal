@@ -157,9 +157,27 @@ pnpm verify
 
 Runs the frontend checks, JS/MCP/Rust tests, Rust lints and a production frontend build.
 
+### Browser tests
+
+`pnpm test:browser` runs the Playwright tests in a headless Chromium, which is
+downloaded separately. Install it once, and again after updating `@playwright/test`:
+
+```bash
+pnpm exec playwright install chromium
+```
+
+Playwright does not officially support every distro release (Ubuntu 26.04, for
+example). There the install fails with `Playwright does not support chromium on
+<distro>`; download the Ubuntu 24.04 build instead, which runs fine:
+
+```bash
+PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 pnpm exec playwright install chromium
+```
+
 ## Troubleshooting
 
 - **`Unsupported class file major version 69`** or a Gradle crash at startup: Gradle is running on JDK 25. Set `JAVA_HOME` to JDK 21.
 - **`NDK_HOME` / `ANDROID_HOME` not set**: export them as shown above.
 - **`A public key has been found, but no private key`**: you ran plain `tauri build`; use `pnpm fork:build:linux`.
 - **`webkit2gtk-4.1` not found**: install `libwebkit2gtk-4.1-dev`.
+- **`Executable doesn't exist at .../ms-playwright/...`** in `pnpm test:browser`: install Playwright's Chromium (see [Browser tests](#browser-tests)).
