@@ -51,7 +51,9 @@ fn verify(secret: &str, domain: &str, nonce: &str, data: &[u8], given: &str) -> 
     }
     let Ok(bytes) = given
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|part| u8::from_str_radix(std::str::from_utf8(part).unwrap_or(""), 16))
         .collect::<Result<Vec<_>, _>>()
     else {
@@ -380,4 +382,44 @@ pub async fn call(connection: &Connection, action: &str, args: Value) -> Result<
             .to_string());
     }
     Ok(response["result"].clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{signature, verify};
+
+    #[test]
+    fn verifies_only_the_exact_signature() {
+        let good = signature("secret", "request", "nonce", b"body");
+        assert_eq!(good.len(), 64);
+        assert!(verify("secret", "request", "nonce", b"body", &good));
+        assert!(verify(
+            "secret",
+            "request",
+            "nonce",
+            b"body",
+            &good.to_uppercase()
+        ));
+        assert!(!verify("other", "request", "nonce", b"body", &good));
+        assert!(!verify("secret", "response", "nonce", b"body", &good));
+        assert!(!verify("secret", "request", "nonce2", b"body", &good));
+        assert!(!verify("secret", "request", "nonce", b"body!", &good));
+    }
+
+    #[test]
+    fn rejects_malformed_signatures() {
+        let good = signature("secret", "request", "nonce", b"body");
+        assert!(!verify("secret", "request", "nonce", b"body", &good[..62]));
+        assert!(!verify(
+            "secret",
+            "request",
+            "nonce",
+            b"body",
+            &format!("{good}00")
+        ));
+        let not_hex = format!("zz{}", &good[2..]);
+        assert!(!verify("secret", "request", "nonce", b"body", &not_hex));
+        let non_ascii = format!("é{}", &good[2..]); // 64 bytes, not ASCII
+        assert!(!verify("secret", "request", "nonce", b"body", &non_ascii));
+    }
 }
