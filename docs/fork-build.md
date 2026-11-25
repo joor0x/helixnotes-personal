@@ -95,7 +95,9 @@ The `Windows portable build` GitHub Actions workflow
 (`.github/workflows/windows-portable.yml`) builds `HelixNotes.exe` and uploads
 `HelixNotes_<version>_windows_x64_portable.zip` as a workflow artifact. It runs on
 every push to `main`, on pull requests and on demand from the Actions tab. Pushing a `fork-v*` tag
-(for example `fork-v1.3.8`) also publishes the zip as a GitHub release.
+(for example `fork-v1.3.8`) also publishes the zip as a GitHub release. Before
+packaging, the workflow starts the exe on the runner and fails if it exits early,
+writes no webview data to `data\` or touches `%APPDATA%` / `%LOCALAPPDATA%`.
 
 To build it on a Windows machine instead, install Rust, Node.js 22 and the
 [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/#windows),

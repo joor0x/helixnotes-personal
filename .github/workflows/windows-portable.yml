@@ -47,6 +47,44 @@ jobs:
           HELIXNOTES_INSTALL_TYPE: portable
         run: pnpm tauri build --no-bundle --config src-tauri/tauri.fork.conf.json
 
+      # Starts the exe from a scratch folder and checks that it stays up, writes its webview data
+      # into data\ and leaves AppData alone.
+      - name: Smoke test portable exe
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "portable-smoke"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Copy-Item src-tauri/target/release/helixnotes.exe "$dir/HelixNotes.exe"
+          $appData = @(
+            (Join-Path $env:APPDATA "helixnotes"),
+            (Join-Path $env:APPDATA "com.helixnotes.app"),
+            (Join-Path $env:LOCALAPPDATA "helixnotes"),
+            (Join-Path $env:LOCALAPPDATA "com.helixnotes.app")
+          )
+          $app = Start-Process -FilePath "$dir/HelixNotes.exe" -WorkingDirectory $dir -PassThru
+          $webview = Join-Path $dir "data/webview"
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Get-Date) -lt $deadline -and -not $app.HasExited) {
+            if ((Test-Path $webview) -and (Get-ChildItem $webview -Recurse -File | Select-Object -First 1)) { break }
+            Start-Sleep -Seconds 2
+          }
+          Start-Sleep -Seconds 5
+          $failures = @()
+          if ($app.HasExited) { $failures += "HelixNotes.exe exited early with code $($app.ExitCode)" }
+          if (-not (Test-Path $webview) -or -not (Get-ChildItem $webview -Recurse -File | Select-Object -First 1)) {
+            $failures += "No webview data under $webview"
+          }
+          foreach ($path in $appData) {
+            if (Test-Path $path) { $failures += "Portable exe wrote to $path" }
+          }
+          if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+          Get-ChildItem $dir -Recurse -Depth 2 | Select-Object -ExpandProperty FullName
+          if ($failures.Count -gt 0) {
+            $failures | ForEach-Object { Write-Error $_ -ErrorAction Continue }
+            exit 1
+          }
+          Write-Host "Portable exe started and kept its data in $dir\data"
+
       - name: Package zip
         id: package
         shell: pwsh
