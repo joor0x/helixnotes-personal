@@ -12209,12 +12209,12 @@
 		transition: background 0.15s, border-color 0.15s;
 	}
 
-	:global(.tiptap-wrapper .tiptap ul[data-type="taskList"] li[data-checked="true"] label input[type="checkbox"]) {
+	:global(.tiptap-wrapper .tiptap ul[data-type="taskList"] li[data-checked="true"] > label input[type="checkbox"]) {
 		background: var(--accent);
 		border-color: var(--accent);
 	}
 
-	:global(.tiptap-wrapper .tiptap ul[data-type="taskList"] li[data-checked="true"] label input[type="checkbox"]::after) {
+	:global(.tiptap-wrapper .tiptap ul[data-type="taskList"] li[data-checked="true"] > label input[type="checkbox"]::after) {
 		content: '';
 		position: absolute;
 		left: 3px;
