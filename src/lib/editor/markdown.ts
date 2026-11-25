@@ -74,23 +74,77 @@ export interface ListItemBlock {
 }
 
 /**
+ * How a note indents what is nested in a list item: `'marker'` lines it up with the item's text
+ * (two spaces under `- `, three under `1. `, CommonMark's content column); otherwise a fixed run
+ * of spaces or a tab the note already uses, so saving never reindents a whole note.
+ */
+export type ListIndentStyle = 'marker' | 'tab' | number;
+
+const LIST_ITEM_LINE = /^([ \t]*)([-*+]|\d{1,9}[.)])(?:[ \t]+|$)/;
+const FENCE_LINE = /^[ \t]*(`{3,}|~{3,})/;
+
+/** The indentation the first nested list item of `source` uses; `'marker'` when there is none. */
+export function detectListIndent(source: string): ListIndentStyle {
+  const parents: { indent: number; width: number }[] = [];
+  let fence = '';
+  for (const line of source.split('\n')) {
+    const fenceMatch = FENCE_LINE.exec(line);
+    if (fence) {
+      if (fenceMatch && fenceMatch[1][0] === fence[0] && fenceMatch[1].length >= fence.length) fence = '';
+      continue;
+    }
+    if (fenceMatch) { fence = fenceMatch[1]; continue; }
+    if (!line.trim()) continue;
+    const item = LIST_ITEM_LINE.exec(line);
+    if (!item) {
+      if (!/^[ \t]/.test(line)) parents.length = 0; // a top-level block ends the list
+      continue;
+    }
+    const leading = item[1];
+    if (leading.includes('\t')) {
+      if (parents.length) return 'tab';
+      continue;
+    }
+    const indent = leading.length;
+    while (parents.length && parents[parents.length - 1].indent >= indent) parents.pop();
+    const parent = parents[parents.length - 1];
+    if (parent) {
+      const delta = indent - parent.indent;
+      // Nested only from the parent's content column, and at most three columns past it.
+      if (delta >= parent.width && delta <= parent.width + 3) return delta === parent.width ? 'marker' : delta;
+    }
+    parents.push({ indent, width: item[2].length + 1 });
+  }
+  return 'marker';
+}
+
+/** The indentation of the blocks nested in an item whose marker (`- `, `1. `) is `markerWidth` wide. */
+export function listIndent(markerWidth: number, style: ListIndentStyle = 'marker'): string {
+  if (style === 'tab' && markerWidth <= 4) return '\t';
+  // A narrower indent would end the item instead of nesting under it.
+  const width = typeof style === 'number' ? Math.max(style, markerWidth) : markerWidth;
+  return ' '.repeat(width);
+}
+
+/**
  * Join the serialized children of one list item. The first block follows the list marker; a nested
- * list is indented four spaces directly under it; any other block (a further paragraph, a code
+ * list is indented by `indent` directly under it; any other block (a further paragraph, a code
  * block, a quote) is separated by a blank line and indented the same way so it stays in the item.
  */
-export function joinListItemBlocks(blocks: readonly ListItemBlock[]): string {
+export function joinListItemBlocks(blocks: readonly ListItemBlock[], indent = '    '): string {
+  const nest = (text: string) => text.split('\n').map((line) => (line ? indent + line : line)).join('\n');
   const parts: string[] = [];
   blocks.forEach((block, index) => {
     if (block.isList) {
       // A serialized list ends with a blank line; left in, it became an indented blank line here
       // and an extra empty line after the outer list.
-      parts.push(block.text.replace(/\n+$/, '').split('\n').map((line) => (line ? '    ' + line : line)).join('\n'));
+      parts.push(nest(block.text.replace(/\n+$/, '')));
     } else if (index === 0) {
       parts.push(block.text);
     } else {
       const body = block.text.replace(/\n+$/, '');
       if (body.trim() === '') return;
-      parts.push('', body.split('\n').map((line) => (line ? '    ' + line : line)).join('\n'));
+      parts.push('', nest(body));
     }
   });
   return parts.join('\n') + '\n';

@@ -14,7 +14,7 @@ const { code } = await transformWithEsbuild(source, 'markdown.ts', {
   format: 'esm',
   target: 'esnext'
 });
-const { escapeBlockStarts, joinListItemBlocks, joinMarkdownBlocks, literalTextEscapes, serializeCodeBlock, serializeInlineMarkdown, serializeInlineMarkdownKeepingDollars } = await import(
+const { detectListIndent, escapeBlockStarts, joinListItemBlocks, listIndent, joinMarkdownBlocks, literalTextEscapes, serializeCodeBlock, serializeInlineMarkdown, serializeInlineMarkdownKeepingDollars } = await import(
   `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`
 );
 
@@ -686,4 +686,35 @@ test('an image with a width or height is written as HTML so the size is kept', (
   const html = serializeInlineMarkdown(sized);
   assert.equal(html, '<img src="d.png" alt="Logo &quot;x&quot;" width="120" height="40">');
   assert.match(markdown.render(html), /<img src="d.png" alt="Logo &quot;x&quot;" width="120" height="40">/);
+});
+
+test('nested list indentation follows the note instead of reindenting it', () => {
+  assert.equal(detectListIndent(''), 'marker');
+  assert.equal(detectListIndent('- a\n- b\n'), 'marker');
+  assert.equal(detectListIndent('- [ ] Task\n  - [ ] Sub\n'), 'marker');
+  assert.equal(detectListIndent('1. One\n   - sub\n'), 'marker');
+  assert.equal(detectListIndent('- [ ] Task\n    - [ ] Sub\n'), 4);
+  assert.equal(detectListIndent('- a\n\t- b\n'), 'tab');
+  // Indented lines in code fences or outside a list say nothing about lists.
+  assert.equal(detectListIndent('```\n- a\n    - b\n```\n- c\n  - d\n'), 'marker');
+  assert.equal(detectListIndent('Text\n    - code-like\n- a\n    - b\n'), 4);
+  // Deeper levels are measured from their own parent.
+  assert.equal(detectListIndent('1. a\n   1. b\n'), 'marker');
+
+  assert.equal(listIndent(2), '  ');
+  assert.equal(listIndent(3), '   ');
+  assert.equal(listIndent(2, 4), '    ');
+  assert.equal(listIndent(4, 2), '    ', 'never narrower than the marker, or the item would end');
+  assert.equal(listIndent(2, 'tab'), '\t');
+  assert.equal(joinListItemBlocks([item('Task'), item('- [ ] Sub\n', true)], listIndent(2)), 'Task\n  - [ ] Sub\n');
+});
+
+test('marker-width indentation parses back with nested lists and blocks inside the item', () => {
+  for (const [marker, indent] of [['- ', listIndent(2)], ['1. ', listIndent(3)], ['10. ', listIndent(4)], ['- [ ] ', listIndent(2)], ['- ', listIndent(2, 'tab')]]) {
+    const text = marker + joinListItemBlocks([item('step'), item('- nested\n', true), item('```js\nconst a = 1;\n```\n'), item('more text\n')], indent);
+    const html = editorMarkdown.render(text + '- next\n');
+    const listItem = html.match(/<li[^>]*>[\s\S]*?<\/li>\s*<\/ul>[\s\S]*?<\/li>/)?.[0] ?? html;
+    assert.match(listItem, /<li[^>]*>[\s\S]*nested[\s\S]*<code[^>]*>const a = 1;[\s\S]*more text/, JSON.stringify({ marker, text, html }));
+    assert.doesNotMatch(html, /<pre><code>- nested/, JSON.stringify({ marker, html }));
+  }
 });

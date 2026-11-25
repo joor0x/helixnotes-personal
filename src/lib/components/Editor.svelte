@@ -74,7 +74,7 @@
 	import { buildCodeCopyDecorations, buildTaskMetaDecorations, focusedPlaceholderDecorations } from '$lib/editor/decorations';
 	import { taskRecurrencePlugin } from '$lib/editor/recurrence';
 	import { REPEAT_PRESETS, repeatLabel, repeatLabelsFrom } from '$lib/utils/task-recurrence';
-	import { escapeBlockStarts, serializeImage, serializeInlineMarkdownKeepingDollars, serializeCodeBlock, joinMarkdownBlocks, joinListItemBlocks, type ListItemBlock, type MarkdownBlock } from '$lib/editor/markdown';
+	import { escapeBlockStarts, serializeImage, serializeInlineMarkdownKeepingDollars, serializeCodeBlock, joinMarkdownBlocks, joinListItemBlocks, detectListIndent, listIndent, type ListIndentStyle, type ListItemBlock, type MarkdownBlock } from '$lib/editor/markdown';
 	import { restoreTitleHeading, stripTitleHeading, type HiddenTitleHeading } from '$lib/editor/titleVisibility';
 	import { documentHeadings, sourceHeadings, activeHeadingIndex, mapDocumentHeadings, mapSourceHeadings, type OutlineHeading } from '$lib/editor/outline';
 	import { createEditorMarkdownParser } from '$lib/editor/markdownParser';
@@ -4580,26 +4580,30 @@
 				return serializeCallout(node, serializeNode);
 			case 'bulletList': {
 				const items: string[] = [];
-				node.forEach((child: any) => items.push('- ' + serializeListItem(child)));
+				node.forEach((child: any) => items.push('- ' + serializeListItem(child, 2)));
 				return items.join('') + '\n';
 			}
 			case 'orderedList': {
 				const items: string[] = [];
 				let i = node.attrs.start ?? 1;
-				node.forEach((child: any) => { items.push(`${i++}. ` + serializeListItem(child)); });
+				node.forEach((child: any) => {
+					const marker = `${i++}. `;
+					items.push(marker + serializeListItem(child, marker.length));
+				});
 				return items.join('') + '\n';
 			}
 			case 'taskList': {
 				const items: string[] = [];
 				node.forEach((child: any) => {
 					const checked = child.attrs.checked ? 'x' : ' ';
-					items.push(`- [${checked}] ` + serializeListItem(child));
+					// The task box is item text: nested blocks line up with `- `, not with the box.
+					items.push(`- [${checked}] ` + serializeListItem(child, 2));
 				});
 				return items.join('') + '\n';
 			}
 			case 'listItem':
 			case 'taskItem':
-				return serializeListItem(node);
+				return serializeListItem(node, 2);
 			case 'horizontalRule':
 				return '---\n';
 			case 'pageBreak':
@@ -4656,7 +4660,7 @@
 		}
 	}
 
-	function serializeListItem(node: any): string {
+	function serializeListItem(node: any, markerWidth: number): string {
 		const blocks: ListItemBlock[] = [];
 		node.forEach((child: any, _offset: number, index: number) => {
 			const isList = child.type.name === 'bulletList' || child.type.name === 'orderedList' || child.type.name === 'taskList';
@@ -4668,7 +4672,15 @@
 					: serializeNode(child),
 			});
 		});
-		return joinListItemBlocks(blocks);
+		return joinListItemBlocks(blocks, listIndent(markerWidth, noteListIndent()));
+	}
+
+	// Nested list indentation follows the note as last loaded or saved, so saving never reindents it.
+	let sourceListIndent: { raw: string; style: ListIndentStyle } | null = null;
+	function noteListIndent(): ListIndentStyle {
+		const raw = saves.raw;
+		if (sourceListIndent?.raw !== raw) sourceListIndent = { raw, style: detectListIndent(raw) };
+		return sourceListIndent.style;
 	}
 
 	function inlineMathPayloads(markdown: string): string[] {
