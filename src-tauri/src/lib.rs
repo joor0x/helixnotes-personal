@@ -3,6 +3,7 @@ mod asset_scope;
 mod backup;
 mod commands;
 mod external_assets;
+mod git_sync;
 mod history;
 mod i18n;
 mod image_proxy;
@@ -298,6 +299,9 @@ pub fn run() {
             commands::set_sync_settings,
             commands::test_sync_connection,
             commands::sync_now,
+            commands::set_git_settings,
+            commands::get_git_info,
+            commands::git_sync_now,
             commands::get_install_type,
             #[cfg(desktop)]
             portable::open_note_window,

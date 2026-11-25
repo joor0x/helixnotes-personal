@@ -3,6 +3,7 @@ import type { Language } from './i18n/core';
 import type { EditorMode } from './editor/mode';
 import type { ExternalNoteReference } from "./editor/externalNote";
 import type {
+  GitInfo,
   AppConfig,
   CustomTheme,
   NoteContent,
@@ -629,6 +630,28 @@ export async function testSyncConnection(): Promise<void> {
 
 export async function syncNow(): Promise<void> {
   return invoke("sync_now");
+}
+
+// ── Sync (Git) ──
+export async function setGitSettings(settings: {
+  enabled: boolean;
+  remote: string | null;
+  branch: string | null;
+  folders: string[];
+  exclude: string[];
+  onOpen: boolean;
+  onChange: boolean;
+  intervalMinutes: number;
+}): Promise<void> {
+  return invoke("set_git_settings", settings);
+}
+
+export async function getGitInfo(): Promise<GitInfo> {
+  return invoke("get_git_info");
+}
+
+export async function gitSyncNow(): Promise<void> {
+  return invoke("git_sync_now");
 }
 
 // ── Version History ──

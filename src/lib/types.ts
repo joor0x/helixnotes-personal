@@ -69,6 +69,22 @@ export interface VaultConfig {
   sync_folder_requests?: number;
   last_sync_time?: string | null;
   last_backup_time?: string | null;
+  // Per-vault Git sync (opt-in, independent of WebDAV).
+  git_enabled?: boolean;
+  git_remote?: string | null;
+  git_branch?: string | null;
+  git_folders?: string[];
+  git_exclude?: string[];
+  git_on_open?: boolean;
+  git_on_change?: boolean;
+  git_interval_minutes?: number;
+  git_repo_id?: string | null;
+  last_git_sync_time?: string | null;
+}
+
+export interface GitInfo {
+  version: string | null;
+  repo_in_vault: boolean;
 }
 
 export interface PendingOpenFile {

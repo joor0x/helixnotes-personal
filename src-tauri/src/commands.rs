@@ -4784,6 +4784,190 @@ pub fn sync_now(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ── Git sync ──
+
+fn git_repos_dir() -> Result<std::path::PathBuf, String> {
+    let config = app_config_path()?;
+    let dir = config
+        .parent()
+        .ok_or("Config directory not available")?
+        .join("git");
+    Ok(dir)
+}
+
+fn git_sync_config_from(config: &AppConfig) -> Result<crate::git_sync::GitSyncConfig, String> {
+    let v = active_vault_config(config)?;
+    if !v.git_enabled {
+        return Err("Git sync is not enabled for this vault".to_string());
+    }
+    let repo_id = v
+        .git_repo_id
+        .clone()
+        .ok_or("Git sync is not set up for this vault")?;
+    Ok(crate::git_sync::GitSyncConfig {
+        vault: v.path.clone(),
+        external_git_dir: git_repos_dir()?.join(format!("{repo_id}.git")),
+        remote: v.git_remote.clone().unwrap_or_default(),
+        branch: v
+            .git_branch
+            .clone()
+            .filter(|branch| !branch.trim().is_empty())
+            .unwrap_or_else(|| crate::git_sync::DEFAULT_BRANCH.to_string()),
+        folders: v.git_folders.clone(),
+        exclude: v.git_exclude.clone(),
+    })
+}
+
+/// A branch name git accepts and that cannot be read as an option.
+fn valid_git_branch(branch: &str) -> bool {
+    !branch.is_empty()
+        && !branch.starts_with('-')
+        && !branch.starts_with('/')
+        && !branch.ends_with('/')
+        && !branch.ends_with(".lock")
+        && !branch.contains("..")
+        && !branch.contains("//")
+        && !branch.contains("@{")
+        && branch
+            .chars()
+            .all(|ch| !ch.is_control() && !" ~^:?*[\\".contains(ch))
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn set_git_settings(
+    state: State<'_, AppState>,
+    enabled: bool,
+    remote: Option<String>,
+    branch: Option<String>,
+    folders: Vec<String>,
+    exclude: Vec<String>,
+    on_open: bool,
+    on_change: bool,
+    interval_minutes: u32,
+) -> Result<(), String> {
+    let remote = remote
+        .map(|remote| remote.trim().to_string())
+        .filter(|remote| !remote.is_empty());
+    if remote
+        .as_deref()
+        .is_some_and(|remote| remote.starts_with('-'))
+    {
+        return Err("The remote must be a URL or a path".to_string());
+    }
+    let branch = branch
+        .map(|branch| branch.trim().to_string())
+        .filter(|branch| !branch.is_empty());
+    if let Some(branch) = &branch {
+        if !valid_git_branch(branch) {
+            return Err(format!("\"{branch}\" is not a valid branch name"));
+        }
+    }
+    let mut folders: Vec<String> = folders
+        .iter()
+        .filter_map(|folder| crate::git_sync::normalize_folder(folder))
+        .collect();
+    folders.sort();
+    folders.dedup();
+    let exclude: Vec<String> = exclude
+        .iter()
+        .flat_map(|pattern| pattern.lines())
+        .map(|line| line.trim_end().to_string())
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    let active_index = active_vault_index(&config)?;
+    let v = &mut config.vaults[active_index];
+    v.git_enabled = enabled;
+    if enabled && v.git_repo_id.is_none() {
+        v.git_repo_id = Some(uuid::Uuid::new_v4().to_string());
+    }
+    v.git_remote = remote;
+    v.git_branch = branch;
+    v.git_folders = folders;
+    v.git_exclude = exclude;
+    v.git_on_open = on_open;
+    v.git_on_change = on_change;
+    v.git_interval_minutes = interval_minutes;
+    save_app_config(&config)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_git_info(state: State<'_, AppState>) -> Result<crate::git_sync::GitInfo, String> {
+    let vault = state
+        .config
+        .lock()
+        .map_err(|e| e.to_string())?
+        .active_vault
+        .clone()
+        .ok_or("No active vault")?;
+    tauri::async_runtime::spawn_blocking(move || crate::git_sync::info(&vault))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn git_sync_now(app: AppHandle) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    if app
+        .state::<AppState>()
+        .git_syncing
+        .swap(true, Ordering::SeqCst)
+    {
+        return Ok(()); // a Git sync is already running
+    }
+    let gathered = {
+        let state = app.state::<AppState>();
+        let config = state.config.lock().map_err(|e| e.to_string());
+        config.and_then(|config| {
+            let vault = config.active_vault.clone().ok_or("No active vault")?;
+            git_sync_config_from(&config).map(|cfg| (vault, config.active_bookmark_id.clone(), cfg))
+        })
+    };
+    let (vault, bookmark_id, cfg) = match gathered {
+        Ok(gathered) => gathered,
+        Err(error) => {
+            app.state::<AppState>()
+                .git_syncing
+                .store(false, Ordering::SeqCst);
+            return Err(error);
+        }
+    };
+    std::thread::spawn(move || {
+        use tauri::Emitter;
+        let result = crate::git_sync::run_git_sync(app.clone(), bookmark_id.clone(), cfg);
+        app.state::<AppState>()
+            .git_syncing
+            .store(false, Ordering::SeqCst);
+        match result {
+            Ok(summary) => {
+                let ts = chrono::Utc::now().to_rfc3339();
+                if let Ok(mut config) = app.state::<AppState>().config.lock() {
+                    if let Some(vault_config) = config.vaults.iter_mut().find(|candidate| {
+                        vault_matches_identity(candidate, &vault, bookmark_id.as_deref())
+                    }) {
+                        vault_config.last_git_sync_time = Some(ts.clone());
+                    }
+                    let _ = save_app_config(&config);
+                }
+                let _ = app.emit(
+                    "git-sync-done",
+                    serde_json::json!({ "vault_path": vault, "bookmark_id": bookmark_id, "success": true, "summary": summary, "last_sync_time": ts }),
+                );
+            }
+            Err(e) => {
+                let _ = app.emit(
+                    "git-sync-error",
+                    serde_json::json!({ "vault_path": vault, "bookmark_id": bookmark_id, "success": false, "error": e }),
+                );
+            }
+        }
+    });
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn ai_ask(
     app: AppHandle,

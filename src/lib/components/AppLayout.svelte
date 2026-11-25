@@ -66,6 +66,8 @@
 		noteOrder,
 		syncState,
 		type SyncSummary,
+		gitSyncState,
+		type GitSyncSummary,
 		platformIsMobile,
 		activeVaultConfig,
 		activateVaultData,
@@ -88,7 +90,7 @@
 		tabletNavHidden = hidden;
 		localStorage.setItem('helix-tablet-nav-hidden', hidden ? '1' : '0');
 	}
-	import { openVault, restoreExternalVault, loadVaultState, saveVaultState, readNote, deleteNote, createDailyNote, createBackup, getPendingOpenFile, ackPendingOpenFile, getTasks, openExternalMarkdown, addQuickAccess, removeQuickAccess, getQuickAccess, setTheme, syncNow, setTaskDone, setTaskPriority, setTaskDue, setTaskRemind, setTaskRepeat } from '$lib/api';
+	import { openVault, restoreExternalVault, loadVaultState, saveVaultState, readNote, deleteNote, createDailyNote, createBackup, getPendingOpenFile, ackPendingOpenFile, getTasks, openExternalMarkdown, addQuickAccess, removeQuickAccess, getQuickAccess, setTheme, syncNow, gitSyncNow, setTaskDone, setTaskPriority, setTaskDue, setTaskRemind, setTaskRepeat } from '$lib/api';
 	import { syncNativeReminders, takeReminderNote } from '$lib/utils/native-reminders';
 	import { repeatLabelsFrom } from '$lib/utils/task-recurrence';
 	import { darkThemes, isAndroid, isMobile as isMobileTarget } from '$lib/platform';
@@ -345,6 +347,7 @@
 	let unlistenSync: Array<() => void> = [];
 	let unsubDirty: (() => void) | null = null;
 	let onChangeSyncTimer: ReturnType<typeof setTimeout> | null = null;
+	let onChangeGitTimer: ReturnType<typeof setTimeout> | null = null;
 	let prevDirty = false;
 
 
@@ -416,6 +419,28 @@
 		if (!ownerIsCurrent()) return;
 		if (!syncConfigured() || get(syncState).running) return;
 		try { await syncNow(); } catch (_) {}
+	}
+
+	// ── Git sync (opt-in, runs beside WebDAV or any folder-sync tool) ──
+	function gitConfigured(): boolean {
+		return !get(platformIsMobile) && !!activeVaultConfig(get(appConfig))?.git_enabled;
+	}
+
+	function startGitSync() {
+		if (!ownerIsCurrent() || !gitConfigured() || get(gitSyncState).running) return;
+		gitSyncState.update((state) => ({ ...state, running: true, error: null }));
+		gitSyncNow().catch((error) => {
+			if (ownerIsCurrent()) gitSyncState.set({ running: false, error: String(error), result: null });
+		});
+	}
+
+	function checkScheduledGitSync() {
+		if (!ownerIsCurrent() || !gitConfigured()) return;
+		const vc = activeVaultConfig(get(appConfig));
+		const mins = vc?.git_interval_minutes ?? 0;
+		if (!mins || get(gitSyncState).running) return;
+		const last = vc?.last_git_sync_time ? new Date(vc.last_git_sync_time).getTime() : 0;
+		if (Date.now() - last >= mins * 60 * 1000) startGitSync();
 	}
 
 	// Track note navigation in history stack
@@ -1373,6 +1398,28 @@
 		}));
 		if (!ownerIsCurrent()) { unlistenSync.pop()?.(); return; }
 
+		unlistenSync.push(await listen<{ vault_path: string; bookmark_id?: string | null }>('git-sync-progress', ({ payload }) => {
+			if (ownerIsCurrent() && vaultEventMatches(payload, { path: ownerVault!, bookmarkId: ownerBookmark })) gitSyncState.set({ running: true, error: null, result: null });
+		}));
+		if (!ownerIsCurrent()) { unlistenSync.pop()?.(); return; }
+		unlistenSync.push(await listen<{ vault_path: string; bookmark_id?: string | null; summary?: GitSyncSummary; last_sync_time?: string | null }>('git-sync-done', ({ payload }) => {
+			if (!ownerIsCurrent() || !vaultEventMatches(payload, { path: ownerVault!, bookmarkId: ownerBookmark })) return;
+			gitSyncState.set({ running: false, error: null, result: { vault: payload.vault_path, summary: payload.summary ?? {} } });
+			if (!payload.last_sync_time) return;
+			const current = get(appConfig);
+			const active = activeVaultConfig(current);
+			if (current && active && (payload.bookmark_id ?? null) === (active.bookmark_id ?? null)) appConfig.set({
+				...current,
+				vaults: current.vaults.map((v) => v === active ? { ...v, last_git_sync_time: payload.last_sync_time } : v)
+			});
+		}));
+		if (!ownerIsCurrent()) { unlistenSync.pop()?.(); return; }
+		unlistenSync.push(await listen<{ vault_path: string; bookmark_id?: string | null; error?: string }>('git-sync-error', ({ payload }) => {
+			if (ownerIsCurrent() && vaultEventMatches(payload, { path: ownerVault!, bookmarkId: ownerBookmark })) gitSyncState.set({ running: false, error: payload.error ?? 'Git sync failed', result: null });
+		}));
+		if (!ownerIsCurrent()) { unlistenSync.pop()?.(); return; }
+		if (gitConfigured() && activeVaultConfig(get(appConfig))?.git_on_open) startGitSync();
+
 		// Sync when the vault opens (if enabled)
 		if (syncConfigured() && activeVaultConfig(get(appConfig))?.sync_on_open) {
 			try { await syncNow(); } catch (_) {}
@@ -1381,7 +1428,8 @@
 
 		// Auto-sync interval: check on startup and every minute
 		checkScheduledSync();
-		syncInterval = setInterval(checkScheduledSync, 60 * 1000);
+		checkScheduledGitSync();
+		syncInterval = setInterval(() => { checkScheduledSync(); checkScheduledGitSync(); }, 60 * 1000);
 
 		// Auto-sync on note change: a save flips editorDirty true -> false. Debounce a sync.
 		unsubDirty = editorDirty.subscribe((d) => {
@@ -1390,6 +1438,11 @@
 			if (prevDirty && !d && vc?.sync_provider === 'webdav' && vc?.sync_on_change) {
 				if (onChangeSyncTimer) clearTimeout(onChangeSyncTimer);
 				onChangeSyncTimer = setTimeout(() => { if (ownerIsCurrent() && !get(syncState).running) syncNow().catch(() => {}); }, 15000);
+			}
+			if (prevDirty && !d && vc?.git_enabled && vc?.git_on_change) {
+				if (onChangeGitTimer) clearTimeout(onChangeGitTimer);
+				// Longer than WebDAV's delay: each Git sync is a commit, so let an editing burst settle.
+				onChangeGitTimer = setTimeout(startGitSync, 60000);
 			}
 			if (!d) drainPendingOpenFiles();
 			prevDirty = d;
@@ -1416,6 +1469,7 @@
 		if (backupInterval) clearInterval(backupInterval);
 		if (syncInterval) clearInterval(syncInterval);
 		if (onChangeSyncTimer) clearTimeout(onChangeSyncTimer);
+		if (onChangeGitTimer) clearTimeout(onChangeGitTimer);
 		unsubDirty?.();
 		unlistenSync.forEach((u) => u());
 	});

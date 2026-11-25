@@ -137,6 +137,23 @@ export const syncState = writable<{
   result: null,
 });
 
+export interface GitSyncSummary {
+  committed?: number;
+  pulled?: number;
+  conflicts?: number;
+  untracked?: number;
+  pushed?: boolean;
+}
+export const gitSyncState = writable<{
+  running: boolean;
+  error: string | null;
+  result: { vault: string; summary: GitSyncSummary } | null;
+}>({
+  running: false,
+  error: null,
+  result: null,
+});
+
 // Update state
 export const updateAvailable = writable<{
   version: string;
@@ -258,6 +275,7 @@ export function activateVaultData(vaultPath: string | null, bookmarkId: string |
   if (!fresh && dataVaultIdentity === identity) return;
   dataVaultIdentity = identity;
   syncState.set({ running: false, error: null, result: null });
+  gitSyncState.set({ running: false, error: null, result: null });
   activeNote.set(null);
   activeNotePath.set(null);
   activeNotebook.set(null);

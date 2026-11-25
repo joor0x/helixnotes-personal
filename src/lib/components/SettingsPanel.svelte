@@ -10,8 +10,8 @@
 	import { setNewNoteEditorMode } from '$lib/api';
 	import AiModelPicker from './AiModelPicker.svelte';
 	import { AI_CLI_PROVIDERS, isCliProvider, cliProviderInfo } from '$lib/ai-cli';
-	import { showSettings, syncState, theme, resolvedTheme, appConfig, platformIsMobile, activeVaultConfig, updateAvailable as globalUpdateAvailable, updateObj as globalUpdateObj, installType, settingsTab, vaultReady, androidApkUrl, checkForUpdateMobile, notebookSortMode, isManagedInstall, customThemes } from '$lib/stores/app';
-	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setLanguageToolSettings, addSearchFolder, removeSearchFolder, setAttachmentSettings, setSyncSettings, testSyncConnection, syncNow, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments, setReminderNotifications } from '$lib/api';
+	import { showSettings, syncState, gitSyncState, notebooks, theme, resolvedTheme, appConfig, platformIsMobile, activeVaultConfig, updateAvailable as globalUpdateAvailable, updateObj as globalUpdateObj, installType, settingsTab, vaultReady, androidApkUrl, checkForUpdateMobile, notebookSortMode, isManagedInstall, customThemes } from '$lib/stores/app';
+	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setLanguageToolSettings, addSearchFolder, removeSearchFolder, setAttachmentSettings, setSyncSettings, testSyncConnection, syncNow, setGitSettings, getGitInfo, gitSyncNow, getAppConfig, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments, setReminderNotifications } from '$lib/api';
 	import { darkThemes, isMobile, isAndroid } from '$lib/platform';
 	import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 	import { listen } from '@tauri-apps/api/event';
@@ -19,7 +19,7 @@
 	import { applyUiScale, defaultUiScale, uiScalePresets } from '$lib/ui-scale';
 	import { openUrl } from '$lib/api';
 	import type { OrphanAttachment } from '$lib/api';
-	import type { ImportResult, BackupEntry, CustomTheme, CustomThemeColors, StartupView, VaultStats } from '$lib/types';
+	import type { ImportResult, BackupEntry, CustomTheme, CustomThemeColors, StartupView, VaultStats, GitInfo, NotebookEntry } from '$lib/types';
 	import { normalizeStartupView } from '$lib/utils/startup-view';
 
 	let { onBeforeVaultSwitch }: { onBeforeVaultSwitch: () => Promise<boolean> } = $props();
@@ -594,6 +594,150 @@
 			}
 		});
 	});
+
+	// ── Git sync ──
+	let gitEnabled = $state(activeVaultConfig($appConfig)?.git_enabled ?? false);
+	let gitRemote = $state(activeVaultConfig($appConfig)?.git_remote ?? '');
+	let gitBranch = $state(activeVaultConfig($appConfig)?.git_branch ?? '');
+	let gitFolders = $state<string[]>(activeVaultConfig($appConfig)?.git_folders ?? []);
+	let gitExcludeText = $state((activeVaultConfig($appConfig)?.git_exclude ?? []).join('\n'));
+	let gitOnOpen = $state(activeVaultConfig($appConfig)?.git_on_open ?? false);
+	let gitOnChange = $state(activeVaultConfig($appConfig)?.git_on_change ?? false);
+	let gitIntervalMinutes = $state(activeVaultConfig($appConfig)?.git_interval_minutes ?? 0);
+	let gitInfo = $state<GitInfo | null>(null);
+	let gitStarting = $state(false);
+	let gitSettingsError = $state<string | null>(null);
+	let gitMessage = $state<{ type: 'success' | 'error'; text: string } | null>(null);
+	const gitRunning = $derived(gitStarting || $gitSyncState.running);
+
+	// Every folder of the vault, parents first, for the folder picker.
+	const gitFolderChoices = $derived.by(() => {
+		const out: { path: string; name: string; depth: number }[] = [];
+		const walk = (entries: NotebookEntry[], depth: number) => {
+			for (const entry of entries) {
+				out.push({ path: entry.relative_path.replace(/\\/g, '/'), name: entry.name, depth });
+				walk(entry.children ?? [], depth + 1);
+			}
+		};
+		walk($notebooks, 0);
+		return out;
+	});
+	// Chosen folders that no longer exist (renamed or deleted), so they can be removed.
+	const gitMissingFolders = $derived(gitFolders.filter((folder) => !gitFolderChoices.some((choice) => choice.path === folder)));
+
+	let lastGitVault: string | null = null;
+	$effect(() => {
+		const identity = $appConfig?.active_bookmark_id
+			? `bookmark:${$appConfig.active_bookmark_id}`
+			: $appConfig?.active_vault
+				? `path:${$appConfig.active_vault}`
+				: null;
+		if (identity === lastGitVault) return;
+		lastGitVault = identity;
+		const vc = activeVaultConfig($appConfig);
+		gitEnabled = vc?.git_enabled ?? false;
+		gitRemote = vc?.git_remote ?? '';
+		gitBranch = vc?.git_branch ?? '';
+		gitFolders = vc?.git_folders ?? [];
+		gitExcludeText = (vc?.git_exclude ?? []).join('\n');
+		gitOnOpen = vc?.git_on_open ?? false;
+		gitOnChange = vc?.git_on_change ?? false;
+		gitIntervalMinutes = vc?.git_interval_minutes ?? 0;
+		gitInfo = null;
+		gitMessage = null;
+		gitSettingsError = null;
+	});
+
+	$effect(() => {
+		if (activeTab !== 'sync' || gitInfo || $platformIsMobile || !$appConfig?.active_vault) return;
+		getGitInfo().then((info) => { gitInfo = info; }).catch(() => {});
+	});
+
+	function gitExcludeList(): string[] {
+		return gitExcludeText.split('\n').map((line) => line.trimEnd()).filter((line) => line.trim());
+	}
+
+	async function saveGitSettings(): Promise<boolean> {
+		const settings = {
+			enabled: gitEnabled,
+			remote: gitRemote.trim() || null,
+			branch: gitBranch.trim() || null,
+			folders: gitFolders,
+			exclude: gitExcludeList(),
+			onOpen: gitOnOpen,
+			onChange: gitOnChange,
+			intervalMinutes: gitIntervalMinutes,
+		};
+		try {
+			await setGitSettings(settings);
+			gitSettingsError = null;
+		} catch (error) {
+			gitSettingsError = String(error);
+			return false;
+		}
+		// Reload the config: enabling Git assigns the vault a repository id on the backend.
+		const fresh = await getAppConfig().catch(() => null);
+		const current = $appConfig;
+		const active = activeVaultConfig(current);
+		const updated = activeVaultConfig(fresh);
+		if (current && active) {
+			$appConfig = {
+				...current,
+				vaults: current.vaults.map((v) => v === active ? {
+					...v,
+					git_enabled: settings.enabled,
+					git_remote: settings.remote,
+					git_branch: settings.branch,
+					git_folders: settings.folders,
+					git_exclude: settings.exclude,
+					git_on_open: settings.onOpen,
+					git_on_change: settings.onChange,
+					git_interval_minutes: settings.intervalMinutes,
+					git_repo_id: updated?.git_repo_id ?? v.git_repo_id,
+				} : v)
+			};
+		}
+		return true;
+	}
+
+	function toggleGitFolder(path: string) {
+		gitFolders = gitFolders.includes(path) ? gitFolders.filter((folder) => folder !== path) : [...gitFolders, path].sort();
+		saveGitSettings();
+	}
+
+	$effect(() => {
+		const state = $gitSyncState;
+		const vault = maintenanceVault;
+		const translate = $ui;
+		untrack(() => {
+			if (state.running) gitMessage = null;
+			else if (state.error) gitMessage = { type: 'error', text: state.error };
+			else if (state.result && state.result.vault === vault) {
+				const s = state.result.summary;
+				const parts: string[] = [];
+				if (s.committed) parts.push(translate('gitSync.committed', { count: s.committed }));
+				if (s.pulled) parts.push(translate('gitSync.pulled', { count: s.pulled }));
+				if (s.untracked) parts.push(translate('gitSync.untracked', { count: s.untracked }));
+				if (s.conflicts) parts.push(translate('sync.conflicts', { count: s.conflicts }));
+				if (s.pushed) parts.push(translate('gitSync.pushed'));
+				gitMessage = { type: 'success', text: parts.length ? translate('sync.summary', { summary: parts.join(', ') }) : translate('sync.upToDate') };
+			}
+		});
+	});
+
+	async function handleGitSyncNow() {
+		if (!maintenanceVault || gitRunning) return;
+		gitStarting = true;
+		gitMessage = null;
+		try {
+			if (!(await saveGitSettings())) return;
+			await gitSyncNow();
+		} catch (e) {
+			gitMessage = { type: 'error', text: String(e) };
+		} finally {
+			gitStarting = false;
+		}
+	}
 
 	async function handleSyncNow() {
 		if (!maintenanceVault || syncRunning) return;
@@ -2891,6 +3035,126 @@
 									<p class="setting-hint">{$ui("ui.how_many_folders_are_listed_on_the_server_at_once_6_suits_most_30d9ab")}</p>
 								</div>
 							{/if}
+
+							{#if !$platformIsMobile}
+							<div class="settings-section git-sync-section">
+								<h3>{$ui("gitSync.title")}</h3>
+								<label class="setting-toggle">
+									<span class="setting-label">
+										<span class="setting-name">{$ui("gitSync.enable")}</span>
+										<span class="setting-desc">{$ui("gitSync.enableDesc")}</span>
+									</span>
+									<button class="toggle-switch" class:on={gitEnabled} role="switch" aria-checked={gitEnabled} aria-label={$ui("gitSync.enable")} onclick={() => { gitEnabled = !gitEnabled; gitMessage = null; saveGitSettings(); }}><span class="toggle-knob"></span></button>
+								</label>
+								{#if gitInfo && !gitInfo.version}
+									<div class="import-result error"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg><span>{$ui("gitSync.notInstalled")}</span></div>
+								{:else if gitEnabled && gitInfo}
+									<p class="setting-hint">{gitInfo.repo_in_vault ? $ui("gitSync.repoInVault") : $ui("gitSync.repoOutside")}</p>
+								{/if}
+								{#if gitSettingsError}
+									<div class="import-result error"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg><span>{gitSettingsError}</span></div>
+								{/if}
+							</div>
+
+							{#if gitEnabled}
+								<div class="settings-section">
+									<h3>{$ui("gitSync.remote")}</h3>
+									<div class="ai-key-row">
+										<input type="text" class="ai-key-input" placeholder="git@github.com:you/notes.git" value={gitRemote} oninput={(e) => { gitRemote = (e.target as HTMLInputElement).value; }} onblur={saveGitSettings} spellcheck="false" autocomplete="off" />
+									</div>
+									<p class="setting-hint">{$ui("gitSync.remoteHint")}</p>
+								</div>
+								<div class="settings-section">
+									<h3>{$ui("gitSync.branch")}</h3>
+									<div class="ai-key-row">
+										<input type="text" class="ai-key-input" placeholder="main" value={gitBranch} oninput={(e) => { gitBranch = (e.target as HTMLInputElement).value; }} onblur={saveGitSettings} spellcheck="false" autocomplete="off" />
+									</div>
+								</div>
+								<div class="settings-section">
+									<h3>{$ui("gitSync.folders")}</h3>
+									<p class="setting-hint">{$ui("gitSync.foldersHint")}</p>
+									<div class="git-folder-list">
+										<label class="git-folder-row">
+											<input type="checkbox" checked={gitFolders.length === 0} disabled={gitFolders.length === 0} onchange={() => { gitFolders = []; saveGitSettings(); }} />
+											<span>{$ui("gitSync.wholeVault")}</span>
+										</label>
+										{#each gitFolderChoices as folder (folder.path)}
+											{@const parentChosen = gitFolders.some((chosen) => folder.path.startsWith(chosen + '/'))}
+											<label class="git-folder-row" style="padding-left: {8 + folder.depth * 18}px;">
+												<input type="checkbox" checked={parentChosen || gitFolders.includes(folder.path)} disabled={parentChosen} onchange={() => toggleGitFolder(folder.path)} />
+												<span>{folder.name}</span>
+											</label>
+										{:else}
+											<p class="setting-hint">{$ui("gitSync.noFolders")}</p>
+										{/each}
+										{#each gitMissingFolders as folder (folder)}
+											<label class="git-folder-row missing">
+												<input type="checkbox" checked onchange={() => toggleGitFolder(folder)} />
+												<span>{$ui("gitSync.missingFolder", { folder })}</span>
+											</label>
+										{/each}
+									</div>
+								</div>
+								<div class="settings-section">
+									<h3>{$ui("gitSync.exclude")}</h3>
+									<textarea
+										class="ai-style-input git-exclude-input"
+										placeholder={"Private/\n*.pdf\nDrafts/**/*.tmp.md"}
+										value={gitExcludeText}
+										oninput={(e) => { gitExcludeText = (e.target as HTMLTextAreaElement).value; }}
+										onblur={saveGitSettings}
+										rows="4"
+										spellcheck="false"
+									></textarea>
+									<p class="setting-hint">{$ui("gitSync.excludeHint")}</p>
+								</div>
+								<div class="settings-section">
+									<h3>{$ui("ui.sync")}</h3>
+									<button class="import-btn" onclick={handleGitSyncNow} disabled={gitRunning || (gitInfo !== null && !gitInfo.version)}>
+										{#if gitRunning}
+											<svg class="spinner-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" opacity="0.25" /><path d="M12 2a10 10 0 019.95 9" /></svg>
+											{$ui("ui.syncing")}
+										{:else}
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v1a2 2 0 01-2 2H8a2 2 0 01-2-2V9"/><path d="M12 12v3"/></svg>
+											{$ui("gitSync.syncNow")}
+										{/if}
+									</button>
+									{#if gitMessage}
+										<div class="import-result {gitMessage.type}">
+											{#if gitMessage.type === 'success'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>{:else}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>{/if}
+											<span class="git-message">{gitMessage.text}</span>
+										</div>
+									{/if}
+									{#if activeVaultConfig($appConfig)?.last_git_sync_time}
+										<p class="setting-hint">{$ui("ui.last_sync", { value0: new Date(activeVaultConfig($appConfig)!.last_git_sync_time!).toLocaleString($locale) })}</p>
+									{/if}
+									<p class="setting-hint">{$ui("gitSync.conflictHint")}</p>
+								</div>
+								<div class="settings-section">
+									<h3>{$ui("ui.automatic_sync")}</h3>
+									<div class="setting-options">
+										{#each [{ v: 0, l: 'Off' }, { v: 15, l: '15 min' }, { v: 30, l: '30 min' }, { v: 60, l: '60 min' }, { v: 240, l: '4 h' }] as opt}
+											<button class="option-btn" class:active={gitIntervalMinutes === opt.v} onclick={() => { gitIntervalMinutes = opt.v; saveGitSettings(); }}>{opt.l}</button>
+										{/each}
+									</div>
+									<p class="setting-hint">{$ui("ui.how_often_to_sync_in_the_background")}</p>
+									<label class="setting-toggle" style="margin-top: 12px;">
+										<span class="setting-label">
+											<span class="setting-name">{$ui("ui.sync_when_a_note_changes")}</span>
+											<span class="setting-desc">{$ui("gitSync.onChangeDesc")}</span>
+										</span>
+										<button class="toggle-switch" class:on={gitOnChange} role="switch" aria-checked={gitOnChange} aria-label={$ui("ui.sync_when_a_note_changes")} onclick={() => { gitOnChange = !gitOnChange; saveGitSettings(); }}><span class="toggle-knob"></span></button>
+									</label>
+									<label class="setting-toggle">
+										<span class="setting-label">
+											<span class="setting-name">{$ui("ui.sync_when_the_vault_opens")}</span>
+											<span class="setting-desc">{$ui("ui.sync_once_when_the_app_starts")}</span>
+										</span>
+										<button class="toggle-switch" class:on={gitOnOpen} role="switch" aria-checked={gitOnOpen} aria-label={$ui("ui.sync_when_the_vault_opens")} onclick={() => { gitOnOpen = !gitOnOpen; saveGitSettings(); }}><span class="toggle-knob"></span></button>
+									</label>
+								</div>
+							{/if}
+							{/if}
 						</div>
 
 					{:else if activeTab === 'updates'}
@@ -3857,6 +4121,58 @@
 	.ai-key-row {
 		display: flex;
 		gap: 6px;
+	}
+
+	.git-sync-section {
+		margin-top: 8px;
+		padding-top: 20px;
+		border-top: 1px solid var(--border-color);
+	}
+
+	.git-folder-list {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		max-height: 260px;
+		overflow-y: auto;
+		margin-top: 8px;
+		padding: 6px 0;
+		border: 1px solid var(--border-color);
+		border-radius: 8px;
+		background: var(--bg-secondary);
+	}
+
+	.git-folder-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 4px 8px;
+		font-size: 13px;
+		color: var(--text-primary);
+		cursor: pointer;
+	}
+
+	.git-folder-row:hover {
+		background: var(--bg-hover);
+	}
+
+	.git-folder-row.missing span {
+		color: var(--text-secondary);
+		font-style: italic;
+	}
+
+	.git-folder-row input {
+		accent-color: var(--accent);
+		margin: 0;
+	}
+
+	.git-exclude-input {
+		font-family: var(--font-mono, ui-monospace, monospace);
+	}
+
+	.git-message {
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 
 	.ai-key-input {

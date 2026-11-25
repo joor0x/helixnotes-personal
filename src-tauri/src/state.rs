@@ -45,6 +45,7 @@ pub struct AppState {
     pub note_save: Arc<tokio::sync::Mutex<()>>,
     pub importing: AtomicBool,
     pub syncing: AtomicBool,
+    pub git_syncing: AtomicBool,
     #[cfg(desktop)]
     pub quitting: AtomicBool,
     pending_open_files: Mutex<PendingOpenFiles>,
@@ -241,6 +242,7 @@ impl AppState {
             note_save: Arc::new(tokio::sync::Mutex::new(())),
             importing: AtomicBool::new(false),
             syncing: AtomicBool::new(false),
+            git_syncing: AtomicBool::new(false),
             #[cfg(desktop)]
             quitting: AtomicBool::new(false),
             pending_open_files: Mutex::new(PendingOpenFiles::default()),

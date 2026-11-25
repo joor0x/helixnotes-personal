@@ -112,6 +112,30 @@ pub struct VaultConfig {
     pub last_sync_time: Option<String>,
     #[serde(default)]
     pub last_backup_time: Option<String>,
+    // Per-vault Git sync, opt-in and independent of WebDAV, so the two can run side by side.
+    #[serde(default)]
+    pub git_enabled: bool,
+    #[serde(default)]
+    pub git_remote: Option<String>,
+    #[serde(default)]
+    pub git_branch: Option<String>,
+    /// Vault-relative folders to commit; empty means the whole vault.
+    #[serde(default)]
+    pub git_folders: Vec<String>,
+    /// Gitignore patterns kept out of the repository.
+    #[serde(default)]
+    pub git_exclude: Vec<String>,
+    #[serde(default)]
+    pub git_on_open: bool,
+    #[serde(default)]
+    pub git_on_change: bool,
+    #[serde(default)]
+    pub git_interval_minutes: u32,
+    /// Names the repository kept in the app's data folder for this vault.
+    #[serde(default)]
+    pub git_repo_id: Option<String>,
+    #[serde(default)]
+    pub last_git_sync_time: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

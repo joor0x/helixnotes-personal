@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { t as ui } from '$lib/i18n';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
-	import { focusMode, readOnly, updateAvailable, showSettings, settingsTab, appConfig, activeNotePath, activeVaultConfig, syncState } from '$lib/stores/app';
-	import { syncNow } from '$lib/api';
+	import { focusMode, readOnly, updateAvailable, showSettings, settingsTab, appConfig, activeNotePath, activeVaultConfig, syncState, gitSyncState, platformIsMobile } from '$lib/stores/app';
+	import { syncNow, gitSyncNow } from '$lib/api';
 	import NoteSwitcher from './NoteSwitcher.svelte';
 	import VaultSwitcher from './VaultSwitcher.svelte';
 	import { activeVaultIdentity, type VaultSwitchResult } from '$lib/utils/vault-switch';
@@ -31,6 +31,19 @@
 	const isMac = navigator.platform.startsWith('Mac');
 	const modKey = isMac ? '⌘' : 'Ctrl';
 	let maximized = $state(false);
+
+	// One button for every sync this vault has turned on: WebDAV, Git, or both.
+	const webdavOn = $derived(activeVaultConfig($appConfig)?.sync_provider === 'webdav');
+	const gitOn = $derived(!$platformIsMobile && !!activeVaultConfig($appConfig)?.git_enabled);
+	const anySyncRunning = $derived((webdavOn && $syncState.running) || (gitOn && $gitSyncState.running));
+	const anySyncError = $derived((webdavOn && $syncState.error) || (gitOn && $gitSyncState.error) || null);
+	function syncEverything() {
+		if (webdavOn && !$syncState.running) syncNow().catch(() => {});
+		if (gitOn && !$gitSyncState.running) {
+			gitSyncState.update((state) => ({ ...state, running: true, error: null }));
+			gitSyncNow().catch((error) => gitSyncState.set({ running: false, error: String(error), result: null }));
+		}
+	}
 
 	async function checkMaximized() {
 		maximized = await appWindow.isMaximized();
@@ -134,9 +147,9 @@
 				<line x1="3" y1="10" x2="21" y2="10" />
 			</svg>
 		</button>
-		{#if activeVaultConfig($appConfig)?.sync_provider === 'webdav'}
-		<button class="switch-vault-btn" class:active={$syncState.running} onclick={() => { if (!$syncState.running) syncNow().catch(() => {}); }} disabled={$syncState.running} title={$syncState.error ? $ui("ui.sync_error", { value0: $syncState.error }) : ($syncState.running ? $ui("ui.syncing_vault") : $ui("ui.sync_vault_now"))}>
-			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class:sync-spin={$syncState.running}>
+		{#if webdavOn || gitOn}
+		<button class="switch-vault-btn" class:active={anySyncRunning} onclick={syncEverything} disabled={anySyncRunning} title={anySyncError ? $ui("ui.sync_error", { value0: anySyncError }) : (anySyncRunning ? $ui("ui.syncing_vault") : $ui("ui.sync_vault_now"))}>
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class:sync-spin={anySyncRunning}>
 				<path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/>
 			</svg>
 		</button>

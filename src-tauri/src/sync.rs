@@ -238,7 +238,7 @@ fn encode_path(relpath: &str) -> String {
 }
 
 /// Build the conflict-copy relpath: `dir/Note (conflict <stamp>).md`.
-fn conflict_relpath(relpath: &str, stamp: &str) -> String {
+pub(crate) fn conflict_relpath(relpath: &str, stamp: &str) -> String {
     let (dir, name) = match relpath.rfind('/') {
         Some(i) => (&relpath[..=i], &relpath[i + 1..]),
         None => ("", relpath),
@@ -253,7 +253,7 @@ fn conflict_relpath(relpath: &str, stamp: &str) -> String {
 // The note list, search and quick open all go by a note's title, so a conflict copy that only
 // differs in its file name looks identical to the original. Give the copy the same suffix in its
 // title. A note without a title of its own already takes it from the file name.
-fn conflict_copy(relpath: &str, bytes: Vec<u8>, stamp: &str) -> Vec<u8> {
+pub(crate) fn conflict_copy(relpath: &str, bytes: Vec<u8>, stamp: &str) -> Vec<u8> {
     use crate::vault::{frontmatter, operations};
     if !relpath.ends_with(".md") || relpath.starts_with(".helixnotes/") {
         return bytes;
