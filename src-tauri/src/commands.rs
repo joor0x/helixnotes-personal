@@ -1804,12 +1804,17 @@ pub(crate) fn parse_note_tasks(
         });
         let text = crate::reminders::strip_schedule(content);
         let text = PRIORITY_RE.replace_all(&text, " ");
+        let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        // A checkbox with no words yet (only spaces or `due:`-style tokens) is not a task.
+        if text.is_empty() {
+            continue;
+        }
         tasks.push(TaskItem {
             note_path: note_path.to_string(),
             note_title: note_title.to_string(),
             line: line_number,
             raw_line: line.to_string(),
-            text: text.split_whitespace().collect::<Vec<_>>().join(" "),
+            text,
             completed,
             due,
             due_time,
@@ -2006,6 +2011,14 @@ mod task_tests {
         assert_eq!(tasks[0].text, "Review budget");
         assert_eq!(tasks[0].remind.as_deref(), Some("2026-12-07T09:00"));
         assert_eq!(tasks[3].repeat, None);
+    }
+
+    #[test]
+    fn checkboxes_without_text_are_not_tasks() {
+        let body = "- [ ]\n- [ ] \n- [ ]  \n- [ ] due:2026-11-26\n- [x] !high repeat:daily\n- [ ] Real due:2026-11-26\n";
+        let tasks = parse_note_tasks("/v/n.md", "N", body, &[]);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!((tasks[0].text.as_str(), tasks[0].line), ("Real", 5));
     }
 
     #[test]
