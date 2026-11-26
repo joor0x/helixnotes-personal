@@ -10,6 +10,21 @@ Distributed under the original AGPL-3.0 license.
 
 Features and implementation progress are tracked in GitHub Issues.
 
+### Added in this fork
+
+- **Task reminders**: `due:` accepts a time and `remind:YYYY-MM-DDTHH:MM` sets a reminder. On desktop, a system notification is shown at each reminder while the app runs. The Tasks view can also filter by tag.
+- **Native Android reminders**: reminders are scheduled as exact alarms, so they fire while the app is closed. Notifications can be snoozed (10 minutes, 1 hour, tomorrow) without opening the app, open their note when tapped, and are restored after a reboot, an app update or a clock change.
+- **Recurring tasks**: add `repeat:daily|weekdays|weekly|monthly|yearly` or `repeat:<N><d|w|m|y>` to a task. Completing it keeps the completed line and opens the next occurrence, with `due:` and `remind:` moved forward. Periods already past are skipped.
+- **Habit tracker**: an opt-in, per-vault Habits view. Each note in the vault's habits folder is a habit, and the days you mark are saved in the note's `entries` frontmatter property, compatible with Obsidian's Habit Tracker 21. Shows streaks.
+- **LanguageTool grammar and spelling checks**: optional, in the rich editor, using the public API or your own server. Wavy underlines with suggestions and Ignore; code is never checked. A note can set its own language with a `lang:` frontmatter key or from the Info panel.
+- **Bulk task actions**: check or uncheck all tasks in a note, delete completed tasks, or archive them under a "Done" heading. A frontmatter flag keeps a note's tasks out of the Tasks view.
+- **[Git sync](docs/git-sync.md)**: opt-in per vault, coexists with Syncthing. The repository lives outside the vault, conflicts keep both sides, and sync can run manually, on an interval, on change or on open.
+- **[CLI AI providers](docs/ai-cli-providers.md)**: use a locally installed and signed-in Claude Code, Codex or Gemini CLI as a text-only AI provider (desktop only).
+- **Edit external Markdown files in place**: files opened from outside the vault can be edited and autosave back to the original file, without being copied into the vault.
+- **Search extra folders**: global search can also cover folders outside the vault; results open in place.
+- **Image editing**: resize from the corners, drag to move between blocks, captions from the image title, and an optional name prompt when pasting.
+- **[Portable mode](docs/fork-build.md)**: a `portable` marker next to the executable keeps all app state in a `data/` folder beside it, with a portable Windows build.
+
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://gitlab.com/ArkHost/HelixNotes/-/blob/main/LICENSE)
 [![Latest Release](https://img.shields.io/badge/release-v1.3.8-green)](https://gitlab.com/ArkHost/HelixNotes/-/releases/v1.3.8)
 [![Website](https://img.shields.io/badge/web-helixnotes.com-purple)](https://helixnotes.com)
