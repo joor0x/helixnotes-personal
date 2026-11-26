@@ -2824,7 +2824,13 @@
 			taskTimeDraft = `${pad(next.getHours())}:00`;
 			taskDuePicker = { x, y, kind: item.kind };
 			const origin = captureOrigin();
-			tick().then(() => { if (taskDuePicker && isOriginCurrent(origin)) { taskDueInputEl?.focus(); taskDueInputEl?.showPicker?.(); } });
+			// Auto-open the calendar only for a bare date: with a time field next to it,
+			// WebKitGTK's calendar popover covers the time control.
+			tick().then(() => {
+				if (!taskDuePicker || !isOriginCurrent(origin)) return;
+				taskDueInputEl?.focus();
+				if (taskDuePicker.kind === 'due') taskDueInputEl?.showPicker?.();
+			});
 			return;
 		}
 		editor.chain().focus().deleteRange({ from, to }).insertContent(item.token + ' ').run();
