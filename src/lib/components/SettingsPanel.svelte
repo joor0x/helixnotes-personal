@@ -1150,7 +1150,7 @@
 	let showNoteDates = $state($appConfig?.show_note_dates ?? true);
 	let showNoteSwitcher = $state($appConfig?.show_note_switcher ?? false);
 	let startupView = $state<StartupView>(normalizeStartupView($appConfig?.startup_view));
-	let restoreLastSession = $state($appConfig?.restore_last_session ?? false);
+	let restoreLastSession = $state($appConfig?.restore_last_session ?? true);
 	let timeFormat = $state($appConfig?.time_format ?? 'relative');
 	let weekStart = $state($appConfig?.week_start ?? 'monday');
 	let dailyTitleFormat = $state($appConfig?.daily_title_format ?? 'localized');
@@ -1529,7 +1529,7 @@
 			showNoteDates = $appConfig.show_note_dates ?? true;
 			showNoteSwitcher = $appConfig.show_note_switcher ?? false;
 			startupView = normalizeStartupView($appConfig.startup_view);
-			restoreLastSession = $appConfig.restore_last_session ?? false;
+			restoreLastSession = $appConfig.restore_last_session ?? true;
 			timeFormat = $appConfig.time_format ?? 'relative';
 			weekStart = $appConfig.week_start ?? 'monday';
 			dailyTitleFormat = $appConfig.daily_title_format ?? 'localized';

@@ -1327,10 +1327,12 @@
 		} catch (_) {}
 		if (!ownerIsCurrent()) return;
 
-		const restoreLastSession = $appConfig?.restore_last_session === true;
+		const restoreLastSession = $appConfig?.restore_last_session !== false;
 
 		// Display the remembered note independently of the metadata scans.
-		if (restoreLastSession && lastNotePath) void restoreLastNote(lastNotePath, startupToken);
+		const restoringLastNote = restoreLastSession && lastNotePath
+			? restoreLastNote(lastNotePath, startupToken)
+			: Promise.resolve();
 
 		await Promise.allSettled([sidebar?.refresh(), noteList?.refresh()]);
 		if (!ownerIsCurrent()) return;
@@ -1364,6 +1366,14 @@
 			}
 		}
 		if (!ownerIsCurrent()) return;
+
+		// Starting in the Daily view opens today's note unless another note was restored.
+		await restoringLastNote;
+		if (!ownerIsCurrent()) return;
+		if (navigationIsCurrent(startupToken) && $viewMode === 'daily' && !$activeNotePath && !$viewerNote) {
+			await noteList?.handleCreateNote();
+			if (!ownerIsCurrent()) return;
+		}
 
 		initialRefreshPending = false;
 		if (fileRefreshPending) scheduleFileRefresh(refreshLists);

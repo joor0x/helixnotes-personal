@@ -374,7 +374,7 @@ pub struct AppConfig {
     pub enable_wiki_links: bool,
     #[serde(default)]
     pub startup_view: StartupView,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub restore_last_session: bool,
     // DEPRECATED: WebDAV sync moved to per-vault VaultConfig. Kept for one release to migrate old configs.
     #[serde(default)]
@@ -522,7 +522,7 @@ impl Default for AppConfig {
             close_to_tray: false,
             enable_wiki_links: true,
             startup_view: StartupView::All,
-            restore_last_session: false,
+            restore_last_session: true,
             sync_provider: None,
             webdav_url: None,
             webdav_username: None,
