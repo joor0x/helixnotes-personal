@@ -91,11 +91,12 @@ while one is open, starting the other only brings the open one to the front.
 
 ### Windows
 
-The `Windows portable build` GitHub Actions workflow
-(`.github/workflows/windows-portable.yml`) builds `HelixNotes.exe` and uploads
-`HelixNotes_<version>_windows_x64_portable.zip` as a workflow artifact. It runs on
+The `Fork builds` GitHub Actions workflow (`.github/workflows/fork-builds.yml`)
+builds `HelixNotes.exe` and uploads `HelixNotes_<version>_windows_x64_portable.zip`
+as a workflow artifact. Its Linux job does the same for the `.deb` and AppImage
+(built on Ubuntu 22.04, so they run on that release and newer). It runs on
 every push to `main`, on pull requests and on demand from the Actions tab. Pushing a `fork-v*` tag
-(for example `fork-v1.3.8`) also publishes the zip as a GitHub release. Before
+(for example `fork-v1.3.8`) also publishes the zip, `.deb` and AppImage in one GitHub release. Before
 packaging, the workflow starts the exe on the runner and fails if it exits early,
 writes no webview data to `data\` or touches `%APPDATA%` / `%LOCALAPPDATA%`.
 

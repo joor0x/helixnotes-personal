@@ -1,7 +1,8 @@
-name: Windows portable build
+name: Fork builds
 
-# Builds HelixNotes.exe as a portable app: no installer, all state in a data\ folder next to it.
-# Every run (pushes to main, pull requests, manual runs) uploads the zip as a workflow artifact; a fork-v* tag also publishes it as a release.
+# Builds the fork's packages: a portable Windows zip (no installer, all state in a data\ folder next to
+# HelixNotes.exe) and Linux .deb and AppImage packages. Every run (pushes to main, pull requests, manual
+# runs) uploads them as workflow artifacts; a fork-v* tag also publishes them all in one GitHub release.
 
 on:
   workflow_dispatch:
@@ -14,11 +15,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: windows-portable-${{ github.ref }}
+  group: fork-builds-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  windows-portable:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -104,16 +105,78 @@ jobs:
           path: dist-portable/${{ steps.package.outputs.name }}.zip
           if-no-files-found: error
 
+  linux:
+    # The oldest supported runner, so the packages link against an older glibc and run on more distros.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file pkg-config patchelf \
+            libwebkit2gtk-4.1-dev libssl-dev libxdo-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Builds with HELIXNOTES_INSTALL_TYPE=fork (no in-app updater) and without updater signing.
+      # APPIMAGE_EXTRACT_AND_RUN lets linuxdeploy run without FUSE on the runner.
+      - name: Build .deb and AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: pnpm fork:build:linux
+
+      - name: Collect packages
+        id: package
+        run: |
+          version=$(node -p "require('./package.json').version")
+          mkdir -p dist-linux
+          cp src-tauri/target/release/bundle/deb/*.deb dist-linux/
+          cp src-tauri/target/release/bundle/appimage/*.AppImage dist-linux/
+          ls -l dist-linux
+          echo "name=HelixNotes_${version}_linux_x64" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: dist-linux/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/fork-v')
+    needs: [windows-portable, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/fork-v')
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: pwsh
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
         run: |
-          $zip = "dist-portable/${{ steps.package.outputs.name }}.zip"
-          gh release view "${{ github.ref_name }}" *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload "${{ github.ref_name }}" $zip --clobber
-          } else {
-            gh release create "${{ github.ref_name }}" $zip --title "${{ github.ref_name }}" --generate-notes
-          }
+          ls -l dist
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "$TAG" --generate-notes --verify-tag
+          fi

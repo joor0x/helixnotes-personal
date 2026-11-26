@@ -47,7 +47,7 @@ Fork releases: [github.com/joor0x/helixnotes-personal/releases](https://github.c
 | Platform | How to get it |
 |---|---|
 | Windows | `HelixNotes_<version>_windows_x64_portable.zip` from the releases page. Unzip and run `HelixNotes.exe`; it is [portable](docs/fork-build.md#portable-mode-windows-and-linux). Needs the WebView2 runtime (included in Windows 11 and current Windows 10). |
-| Linux (`.deb`, AppImage) | Build it: `pnpm fork:build:linux` ([details](docs/fork-build.md#linux)). |
+| Linux | `HelixNotes_<version>_amd64.deb` (Debian, Ubuntu 22.04+, Mint) or `HelixNotes_<version>_amd64.AppImage` from the releases page. Or build them: `pnpm fork:build:linux` ([details](docs/fork-build.md#linux)). |
 | Linux (Nix) | `nix build github:joor0x/helixnotes-personal`, or use the flake below. |
 | Android | Build and sign the APK: `pnpm fork:build:android` ([details](docs/fork-build.md#android)). |
 | macOS | Not built or tested for this fork. |
@@ -109,17 +109,15 @@ In `configuration.nix`:
    git tag fork-v1.3.8
    git push origin main fork-v1.3.8
    ```
-   The [`Windows portable build`](.github/workflows/windows-portable.yml) workflow builds
-   the Windows zip and creates the GitHub release for the tag, with notes generated
-   from the commits.
-5. **Attach the Linux and Android packages** built locally, once the workflow has created the release (see
-   [docs/fork-build.md](docs/fork-build.md)):
+   The [`Fork builds`](.github/workflows/fork-builds.yml) workflow builds the Windows
+   portable zip, the `.deb` and the AppImage, then creates the GitHub release for the tag
+   with all three attached and notes generated from the commits. Follow it with
+   `gh run watch`.
+5. **Attach the Android APK** built locally, once the release exists (see
+   [docs/fork-build.md](docs/fork-build.md#android)):
    ```bash
-   pnpm fork:build:linux
    pnpm fork:build:android
    gh release upload fork-v1.3.8 \
-     src-tauri/target/release/bundle/deb/HelixNotes_1.3.8_amd64.deb \
-     src-tauri/target/release/bundle/appimage/HelixNotes_1.3.8_amd64.AppImage \
      src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
    ```
    Sign the APK with the same keystore every time, or installed copies cannot be updated.
