@@ -1329,5 +1329,16 @@
   "ui.archive_completed_tasks_in_note": "Архивировать выполненные задачи заметки",
   "ui.delete_completed_tasks_in_note": "Удалить выполненные задачи заметки",
   "ui.hide_note_tasks_from_tasks_view": "Скрыть задачи заметки в разделе «Задачи»",
-  "ui.show_note_tasks_in_tasks_view": "Показать задачи заметки в разделе «Задачи»"
+  "ui.show_note_tasks_in_tasks_view": "Показать задачи заметки в разделе «Задачи»",
+  "habits.title": "Привычки",
+  "habits.enable": "Отслеживать привычки",
+  "habits.enableDesc": "Добавляет в это хранилище раздел «Привычки». По умолчанию выключено.",
+  "habits.folder": "Папка привычек",
+  "habits.folderHint": "Папка внутри хранилища. Каждая заметка в ней — привычка; отмеченные дни сохраняются в свойстве «entries» заметки, совместимо с Habit Tracker 21 для Obsidian.",
+  "habits.empty": "Привычек пока нет. Создайте заметку в «{folder}», чтобы добавить привычку.",
+  "habits.earlier": "Предыдущие дни",
+  "habits.later": "Следующие дни",
+  "habits.new": "Новая привычка",
+  "habits.streak": "Серия",
+  "ui.open_habits": "Открыть привычки"
 }

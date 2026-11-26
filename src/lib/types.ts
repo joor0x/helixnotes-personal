@@ -80,6 +80,15 @@ export interface VaultConfig {
   git_interval_minutes?: number;
   git_repo_id?: string | null;
   last_git_sync_time?: string | null;
+  /** Vault-relative folder whose notes are habits. Unset turns habits off. */
+  habits_folder?: string | null;
+}
+
+/** A note in the habits folder; `entries` are the days done (YYYY-MM-DD, sorted). */
+export interface Habit {
+  path: string;
+  title: string;
+  entries: string[];
 }
 
 export interface GitInfo {
@@ -320,7 +329,8 @@ export type ViewMode =
   | "search"
   | "quickaccess"
   | "daily"
-  | "tasks";
+  | "tasks"
+  | "habits";
 
 export interface TaskItem {
   note_path: string;

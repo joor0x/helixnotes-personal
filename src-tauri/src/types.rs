@@ -136,6 +136,18 @@ pub struct VaultConfig {
     pub git_repo_id: Option<String>,
     #[serde(default)]
     pub last_git_sync_time: Option<String>,
+    /// Vault-relative folder whose notes are habits. Unset (the default) turns habits off.
+    #[serde(default)]
+    pub habits_folder: Option<String>,
+}
+
+/// A habit: a note in the vault's habits folder whose `entries` frontmatter lists the days done.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Habit {
+    pub path: String,
+    pub title: String,
+    /// Days done, YYYY-MM-DD, sorted.
+    pub entries: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

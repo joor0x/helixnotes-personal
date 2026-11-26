@@ -1329,5 +1329,16 @@
   "ui.archive_completed_tasks_in_note": "Erledigte Aufgaben der Notiz archivieren",
   "ui.delete_completed_tasks_in_note": "Erledigte Aufgaben der Notiz löschen",
   "ui.hide_note_tasks_from_tasks_view": "Aufgaben der Notiz in der Aufgabenansicht ausblenden",
-  "ui.show_note_tasks_in_tasks_view": "Aufgaben der Notiz in der Aufgabenansicht anzeigen"
+  "ui.show_note_tasks_in_tasks_view": "Aufgaben der Notiz in der Aufgabenansicht anzeigen",
+  "habits.title": "Gewohnheiten",
+  "habits.enable": "Gewohnheiten verfolgen",
+  "habits.enableDesc": "Fügt diesem Tresor eine Ansicht „Gewohnheiten“ hinzu. Standardmäßig aus.",
+  "habits.folder": "Ordner für Gewohnheiten",
+  "habits.folderHint": "Ordner im Tresor. Jede Notiz darin ist eine Gewohnheit; die markierten Tage werden in der Eigenschaft „entries“ der Notiz gespeichert, kompatibel mit Habit Tracker 21 für Obsidian.",
+  "habits.empty": "Noch keine Gewohnheiten. Erstelle eine Notiz in „{folder}“, um eine hinzuzufügen.",
+  "habits.earlier": "Frühere Tage",
+  "habits.later": "Spätere Tage",
+  "habits.new": "Neue Gewohnheit",
+  "habits.streak": "Serie",
+  "ui.open_habits": "Gewohnheiten öffnen"
 }

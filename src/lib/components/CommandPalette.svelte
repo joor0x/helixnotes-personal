@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { t as ui, label as uiLabel } from '$lib/i18n';
-	import { showCommandPalette, showSearch, theme, viewMode, activeNotebook, activeTag, activeNotePath, viewerNote } from '$lib/stores/app';
+	import { showCommandPalette, showSearch, theme, viewMode, activeNotebook, activeTag, activeNotePath, viewerNote, habitsFolder } from '$lib/stores/app';
 	import type { BulkTaskAction } from '$lib/api';
 	import { setTheme, reindex } from '$lib/api';
 	import { selectEditorMode } from '$lib/editor/mode';
@@ -22,7 +22,7 @@
 		noteTasks?.run(action);
 	}
 
-	function openView(mode: 'all' | 'quickaccess' | 'tasks' | 'daily' | 'trash') {
+	function openView(mode: 'all' | 'quickaccess' | 'tasks' | 'daily' | 'habits' | 'trash') {
 		$viewMode = mode;
 		$activeNotebook = null;
 		$activeTag = null;
@@ -74,6 +74,12 @@
 			id: 'open-daily',
 			label: 'Open Daily Notes',
 			action: () => openView('daily')
+		},
+		{
+			id: 'open-habits',
+			label: 'Open Habits',
+			available: () => !!$habitsFolder,
+			action: () => openView('habits')
 		},
 		{
 			id: 'open-trash',

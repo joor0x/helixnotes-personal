@@ -1329,5 +1329,16 @@
   "ui.archive_completed_tasks_in_note": "Archivar tareas completadas de la nota",
   "ui.delete_completed_tasks_in_note": "Borrar tareas completadas de la nota",
   "ui.hide_note_tasks_from_tasks_view": "Ocultar tareas de la nota en la vista Tareas",
-  "ui.show_note_tasks_in_tasks_view": "Mostrar tareas de la nota en la vista Tareas"
+  "ui.show_note_tasks_in_tasks_view": "Mostrar tareas de la nota en la vista Tareas",
+  "habits.title": "Hábitos",
+  "habits.enable": "Seguir hábitos",
+  "habits.enableDesc": "Añade una vista de Hábitos a este almacén. Desactivado por defecto.",
+  "habits.folder": "Carpeta de hábitos",
+  "habits.folderHint": "Carpeta dentro del almacén. Cada nota que contiene es un hábito; los días que marcas se guardan en la propiedad «entries» de la nota, compatible con Habit Tracker 21 de Obsidian.",
+  "habits.empty": "Aún no hay hábitos. Crea una nota en «{folder}» para añadir uno.",
+  "habits.earlier": "Días anteriores",
+  "habits.later": "Días posteriores",
+  "habits.new": "Nuevo hábito",
+  "habits.streak": "Racha",
+  "ui.open_habits": "Abrir hábitos"
 }

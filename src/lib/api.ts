@@ -4,6 +4,7 @@ import type { EditorMode } from './editor/mode';
 import type { ExternalNoteReference } from "./editor/externalNote";
 import type {
   GitInfo,
+  Habit,
   AppConfig,
   CustomTheme,
   NoteContent,
@@ -657,6 +658,23 @@ export async function setGitSettings(settings: {
   intervalMinutes: number;
 }): Promise<void> {
   return invoke("set_git_settings", settings);
+}
+
+// ── Habits ──
+
+/** The active vault's habits; empty when the vault has no habits folder. */
+export async function getHabits(): Promise<Habit[]> {
+  return invoke("get_habits");
+}
+
+/** Mark or unmark a day (YYYY-MM-DD) of a habit note; resolves to the note's days. */
+export async function toggleHabitEntry(vaultPath: string, path: string, date: string): Promise<string[]> {
+  return invoke("toggle_habit_entry", { vaultPath, path, date });
+}
+
+/** Set the active vault's habits folder (created when missing), or `null` to turn habits off. */
+export async function setHabitsFolder(folder: string | null): Promise<string | null> {
+  return invoke("set_habits_folder", { folder });
 }
 
 export async function getGitInfo(): Promise<GitInfo> {

@@ -944,6 +944,62 @@ pub fn set_note_hide_tasks(
     Ok(())
 }
 
+/// The habits of a vault: every Markdown note directly inside `folder` (vault-relative).
+/// A folder that does not exist yet has no habits.
+pub fn list_habits(vault_path: &str, folder: &str) -> Result<Vec<crate::types::Habit>, String> {
+    let dir = Path::new(vault_path).join(safe_relative_path(folder)?);
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let dir = ensure_notebook_path(vault_path, &dir)?;
+    let mut habits: Vec<crate::types::Habit> = fs::read_dir(&dir)
+        .map_err(|error| error.to_string())?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && !is_hidden(path)
+                && path.extension().and_then(|extension| extension.to_str()) == Some("md")
+        })
+        .filter_map(|path| {
+            let raw = fs::read_to_string(&path).ok()?;
+            let filename = path.file_name()?.to_string_lossy().to_string();
+            let (meta, _) = frontmatter::parse_note(&raw, &filename);
+            Some(crate::types::Habit {
+                path: path.to_string_lossy().to_string(),
+                title: meta.title,
+                entries: frontmatter::habit_entries(&raw),
+            })
+        })
+        .collect();
+    habits.sort_by(|a, b| {
+        a.title
+            .to_lowercase()
+            .cmp(&b.title.to_lowercase())
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    Ok(habits)
+}
+
+/// Mark or unmark `date` in a habit note's `entries` frontmatter. Returns the note's days.
+pub fn toggle_habit_entry(vault_path: &str, path: &str, date: &str) -> Result<Vec<String>, String> {
+    let validated = ensure_note_path(vault_path, Path::new(path))?;
+    let target = canonicalize_path(&validated, "note path")?;
+    let existing = fs::read_to_string(&target).map_err(|error| error.to_string())?;
+    let (raw, _) = frontmatter::toggle_habit_entry(&existing, date)?;
+    replace_file_atomically(&target, raw.as_bytes())?;
+    Ok(frontmatter::habit_entries(&raw))
+}
+
+/// Create the vault-relative habits folder when it is missing.
+pub fn ensure_habits_folder(vault_path: &str, folder: &str) -> Result<(), String> {
+    let dir = Path::new(vault_path).join(safe_relative_path(folder)?);
+    if !dir.exists() {
+        fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    }
+    ensure_notebook_path(vault_path, &dir).map(|_| ())
+}
+
 pub(crate) fn replace_file_atomically(path: &Path, content: &[u8]) -> Result<(), String> {
     let permissions = match fs::metadata(path) {
         Ok(metadata) => {

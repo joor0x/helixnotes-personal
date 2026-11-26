@@ -19,6 +19,7 @@
 		notebookIcons,
 		tagStyles,
 		appConfig,
+		habitsFolder,
 		quickAccessPaths,
 		collapsedNotebooks,
 		rootNoteCount,
@@ -79,6 +80,7 @@
 		$appConfig?.show_quick_access !== false ||
 		$appConfig?.show_tasks !== false ||
 		$appConfig?.show_daily_notes !== false ||
+		!!$habitsFolder ||
 		$appConfig?.show_trash !== false
 	);
 
@@ -285,6 +287,13 @@
 
 	function selectTasks() {
 		$viewMode = 'tasks';
+		$activeNotebook = null;
+		$activeTag = null;
+		onViewChanged();
+	}
+
+	function selectHabits() {
+		$viewMode = 'habits';
 		$activeNotebook = null;
 		$activeTag = null;
 		onViewChanged();
@@ -893,6 +902,23 @@
 					<line x1="3" y1="10" x2="21" y2="10" />
 				</svg>
 				<span>{$ui("ui.daily_notes")}</span>
+			</button>
+			{/if}
+
+			{#if $habitsFolder}
+			<button
+				class="nav-item"
+				class:active={$viewMode === 'habits'}
+				onclick={selectHabits}
+			>
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<rect x="3" y="3" width="18" height="18" rx="2" />
+					<line x1="3" y1="9" x2="21" y2="9" />
+					<line x1="3" y1="15" x2="21" y2="15" />
+					<line x1="9" y1="3" x2="9" y2="21" />
+					<line x1="15" y1="3" x2="15" y2="21" />
+				</svg>
+				<span>{$ui("habits.title")}</span>
 			</button>
 			{/if}
 

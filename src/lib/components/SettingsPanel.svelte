@@ -11,7 +11,7 @@
 	import AiModelPicker from './AiModelPicker.svelte';
 	import { AI_CLI_PROVIDERS, isCliProvider, cliProviderInfo } from '$lib/ai-cli';
 	import { showSettings, syncState, gitSyncState, notebooks, theme, resolvedTheme, appConfig, platformIsMobile, activeVaultConfig, updateAvailable as globalUpdateAvailable, updateObj as globalUpdateObj, installType, settingsTab, vaultReady, androidApkUrl, checkForUpdateMobile, notebookSortMode, isManagedInstall, customThemes } from '$lib/stores/app';
-	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setLanguageToolSettings, addSearchFolder, removeSearchFolder, setAttachmentSettings, setSyncSettings, testSyncConnection, syncNow, setGitSettings, getGitInfo, gitSyncNow, getAppConfig, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments, setReminderNotifications } from '$lib/api';
+	import { setTheme, setSystemThemes, setAccentColor, setFontSize, setScrollToChangeFontSize, setFontFamily, setLineHeight, setUiScale, setContentWidth, setGeneralSettings, importObsidian, createBackup, listBackups, restoreBackup, deleteBackup, setBackupSettings, setAiSettings, testAiConnection, setLanguageToolSettings, addSearchFolder, removeSearchFolder, setAttachmentSettings, setSyncSettings, testSyncConnection, syncNow, setGitSettings, getGitInfo, gitSyncNow, getAppConfig, saveCustomTheme, deleteCustomTheme, exportCustomTheme, importCustomThemes, getVaultStats, findOrphanedAttachments, trashOrphanedAttachments, setReminderNotifications, setHabitsFolder } from '$lib/api';
 	import { darkThemes, isMobile, isAndroid } from '$lib/platform';
 	import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 	import { listen } from '@tauri-apps/api/event';
@@ -596,6 +596,31 @@
 	});
 
 	// ── Git sync ──
+	// Habits: opt-in per vault. A folder set means on; its notes are the habits.
+	const DEFAULT_HABITS_FOLDER = 'Habits';
+	let habitsEnabled = $state(!!activeVaultConfig($appConfig)?.habits_folder);
+	let habitsFolderText = $state(activeVaultConfig($appConfig)?.habits_folder ?? DEFAULT_HABITS_FOLDER);
+	let habitsError = $state<string | null>(null);
+
+	async function saveHabitsFolder() {
+		const folder = habitsEnabled ? (habitsFolderText.trim() || DEFAULT_HABITS_FOLDER) : null;
+		const active = activeVaultConfig($appConfig);
+		if (!active || (active.habits_folder ?? null) === folder) return;
+		try {
+			const stored = await setHabitsFolder(folder);
+			habitsError = null;
+			if (stored) habitsFolderText = stored;
+			const current = $appConfig;
+			const target = activeVaultConfig(current);
+			if (current && target) {
+				$appConfig = { ...current, vaults: current.vaults.map((v) => v === target ? { ...v, habits_folder: stored } : v) };
+			}
+		} catch (error) {
+			habitsError = String(error);
+			habitsEnabled = !!active.habits_folder;
+		}
+	}
+
 	let gitEnabled = $state(activeVaultConfig($appConfig)?.git_enabled ?? false);
 	let gitRemote = $state(activeVaultConfig($appConfig)?.git_remote ?? '');
 	let gitBranch = $state(activeVaultConfig($appConfig)?.git_branch ?? '');
@@ -636,6 +661,9 @@
 		lastGitVault = identity;
 		const vc = activeVaultConfig($appConfig);
 		gitEnabled = vc?.git_enabled ?? false;
+		habitsEnabled = !!vc?.habits_folder;
+		habitsFolderText = vc?.habits_folder ?? DEFAULT_HABITS_FOLDER;
+		habitsError = null;
 		gitRemote = vc?.git_remote ?? '';
 		gitBranch = vc?.git_branch ?? '';
 		gitFolders = vc?.git_folders ?? [];
@@ -1698,6 +1726,28 @@
 								</label>
 							</div>
 							{/if}
+
+							<div class="settings-section">
+								<h3>{$ui("habits.title")}</h3>
+								<label class="setting-toggle">
+									<span class="setting-label">
+										<span class="setting-name">{$ui("habits.enable")}</span>
+										<span class="setting-desc">{$ui("habits.enableDesc")}</span>
+									</span>
+									<button class="toggle-switch" class:on={habitsEnabled} role="switch" aria-checked={habitsEnabled} aria-label={$ui("habits.enable")} onclick={() => { habitsEnabled = !habitsEnabled; saveHabitsFolder(); }}>
+										<span class="toggle-knob"></span>
+									</button>
+								</label>
+								{#if habitsEnabled}
+									<div class="ai-key-row">
+										<input type="text" class="ai-key-input" aria-label={$ui("habits.folder")} placeholder={DEFAULT_HABITS_FOLDER} value={habitsFolderText} oninput={(e) => { habitsFolderText = (e.target as HTMLInputElement).value; }} onblur={saveHabitsFolder} onkeydown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} spellcheck="false" autocomplete="off" />
+									</div>
+									<p class="setting-hint">{$ui("habits.folderHint")}</p>
+								{/if}
+								{#if habitsError}
+									<p class="setting-hint">{habitsError}</p>
+								{/if}
+							</div>
 
 							{#if !$platformIsMobile}
 							<div class="settings-section">

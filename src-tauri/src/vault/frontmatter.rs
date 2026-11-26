@@ -367,6 +367,68 @@ pub fn frontmatter_hides_tasks(raw: &str) -> bool {
     }
 }
 
+/// The frontmatter list of days a habit was done, as written by Obsidian's Habit Tracker 21.
+pub const HABIT_ENTRIES_KEY: &str = "entries";
+
+fn is_habit_date(value: &str) -> bool {
+    value.len() == 10 && chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
+}
+
+fn habit_entry_values(raw: &str) -> Vec<serde_yaml::Value> {
+    let rest = raw.strip_prefix('\u{FEFF}').unwrap_or(raw);
+    let Some((open_len, yaml_end, _)) = frontmatter_fences(rest) else {
+        return Vec::new();
+    };
+    let yaml = &rest[open_len..yaml_end];
+    if !yaml.contains(HABIT_ENTRIES_KEY) {
+        return Vec::new();
+    }
+    let Ok(mut mapping) = serde_yaml::from_str::<serde_yaml::Mapping>(yaml) else {
+        return Vec::new();
+    };
+    match mapping.remove(HABIT_ENTRIES_KEY) {
+        Some(serde_yaml::Value::Sequence(values)) => values,
+        _ => Vec::new(),
+    }
+}
+
+/// The days (YYYY-MM-DD) in the note's `entries` frontmatter list, sorted and without
+/// duplicates. Values that are not dates are skipped.
+pub fn habit_entries(raw: &str) -> Vec<String> {
+    let mut days: Vec<String> = habit_entry_values(raw)
+        .iter()
+        .filter_map(|value| value.as_str())
+        .map(str::trim)
+        .filter(|day| is_habit_date(day))
+        .map(str::to_string)
+        .collect();
+    days.sort();
+    days.dedup();
+    days
+}
+
+/// Add `date` (YYYY-MM-DD) to the note's `entries` list, or remove it when present, keeping
+/// the body bytes and every other key. Returns the new raw note and whether the day is now done.
+pub fn toggle_habit_entry(raw: &str, date: &str) -> Result<(String, bool), String> {
+    if !is_habit_date(date) {
+        return Err("The date must be YYYY-MM-DD".to_string());
+    }
+    let mut values = habit_entry_values(raw);
+    let before = values.len();
+    values.retain(|value| value.as_str().map(str::trim) != Some(date));
+    let done = values.len() == before;
+    if done {
+        values.push(serde_yaml::Value::String(date.to_string()));
+    }
+    values.sort_by(|a, b| a.as_str().cmp(&b.as_str()));
+    let raw = set_frontmatter_key(
+        raw,
+        &[],
+        Some((HABIT_ENTRIES_KEY, serde_yaml::Value::Sequence(values))),
+    )?;
+    Ok((raw, done))
+}
+
 /// Replace the frontmatter keys in `remove` with `insert` (or just remove them), keeping the
 /// body bytes and every other key. A note without frontmatter gets a minimal block only when
 /// something is inserted.
@@ -947,5 +1009,41 @@ mod external_body_tests {
         );
         // An unclosed fence is body text, not frontmatter.
         assert_eq!(replace("---\nnot closed\n", "New"), "New");
+    }
+}
+
+#[cfg(test)]
+mod habit_tests {
+    use super::{habit_entries, toggle_habit_entry};
+
+    #[test]
+    fn entries_are_read_sorted_and_non_dates_are_skipped() {
+        let raw =
+            "---\ntitle: Run\nentries: [2026-11-26, 2026-11-24, nope, 2026-11-24]\n---\nbody\n";
+        assert_eq!(habit_entries(raw), ["2026-11-24", "2026-11-26"]);
+        assert!(habit_entries("---\ntitle: Run\n---\nentries: [2026-11-24]\n").is_empty());
+        assert!(habit_entries("no frontmatter").is_empty());
+    }
+
+    #[test]
+    fn toggling_adds_then_removes_a_day_and_keeps_the_rest() {
+        let raw = "---\ntitle: Run\nentries:\n- 2026-11-24\n---\n# Run\n\nbody\n";
+        let (added, done) = toggle_habit_entry(raw, "2026-11-20").unwrap();
+        assert!(done);
+        assert_eq!(habit_entries(&added), ["2026-11-20", "2026-11-24"]);
+        assert!(added.contains("title: Run\n") && added.ends_with("---\n# Run\n\nbody\n"));
+
+        let (removed, done) = toggle_habit_entry(&added, "2026-11-20").unwrap();
+        assert!(!done);
+        assert_eq!(removed, raw);
+    }
+
+    #[test]
+    fn toggling_a_note_without_frontmatter_creates_it_and_bad_dates_are_rejected() {
+        let (raw, done) = toggle_habit_entry("Hola\n", "2026-11-26").unwrap();
+        assert!(done);
+        assert_eq!(raw, "---\nentries:\n- 2026-11-26\n---\nHola\n");
+        assert!(toggle_habit_entry("Hola\n", "26/11/2026").is_err());
+        assert!(toggle_habit_entry("Hola\n", "2026-13-01").is_err());
     }
 }

@@ -25,6 +25,8 @@ export function activeVaultConfig(c: AppConfig | null): VaultConfig | null {
   }
   return c.vaults.find((v) => !v.bookmark_id && v.path === c.active_vault) ?? null;
 }
+/** The active vault's habits folder (vault-relative), or null while habits are off. */
+export const habitsFolder = derived(appConfig, (c) => activeVaultConfig(c)?.habits_folder || null);
 export const vaultReady = writable(false);
 
 // UI state

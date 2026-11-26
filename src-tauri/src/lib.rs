@@ -4,6 +4,7 @@ mod backup;
 mod commands;
 mod external_assets;
 mod git_sync;
+mod habits;
 mod history;
 mod i18n;
 mod image_proxy;
@@ -303,6 +304,9 @@ pub fn run() {
             commands::test_sync_connection,
             commands::sync_now,
             commands::set_git_settings,
+            commands::set_habits_folder,
+            habits::get_habits,
+            habits::toggle_habit_entry,
             commands::get_git_info,
             commands::git_sync_now,
             commands::get_install_type,

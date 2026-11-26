@@ -4634,7 +4634,7 @@ fn active_vault_index(config: &AppConfig) -> Result<usize, String> {
         .ok_or_else(|| "Active vault not found in config".to_string())
 }
 
-fn active_vault_config(config: &AppConfig) -> Result<&VaultConfig, String> {
+pub(crate) fn active_vault_config(config: &AppConfig) -> Result<&VaultConfig, String> {
     Ok(&config.vaults[active_vault_index(config)?])
 }
 
@@ -4938,6 +4938,31 @@ pub fn set_git_settings(
     v.git_interval_minutes = interval_minutes;
     save_app_config(&config)?;
     Ok(())
+}
+
+/// Choose the active vault's habits folder (created when missing), or turn habits off with
+/// `None`. Returns the folder as stored.
+#[tauri::command]
+pub fn set_habits_folder(
+    state: State<'_, AppState>,
+    folder: Option<String>,
+) -> Result<Option<String>, String> {
+    let folder = match folder.as_deref().map(str::trim).filter(|f| !f.is_empty()) {
+        Some(folder) => Some(
+            crate::git_sync::normalize_folder(folder)
+                .filter(|folder| !folder.split('/').any(|part| part.starts_with('.')))
+                .ok_or("The habits folder must be a folder inside the vault")?,
+        ),
+        None => None,
+    };
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    let active_index = active_vault_index(&config)?;
+    if let Some(folder) = &folder {
+        operations::ensure_habits_folder(&config.vaults[active_index].path, folder)?;
+    }
+    config.vaults[active_index].habits_folder = folder.clone();
+    save_app_config(&config)?;
+    Ok(folder)
 }
 
 #[tauri::command]

@@ -1329,5 +1329,16 @@
   "ui.archive_completed_tasks_in_note": "Archive Completed Tasks in Note",
   "ui.delete_completed_tasks_in_note": "Delete Completed Tasks in Note",
   "ui.hide_note_tasks_from_tasks_view": "Hide Note Tasks from Tasks View",
-  "ui.show_note_tasks_in_tasks_view": "Show Note Tasks in Tasks View"
+  "ui.show_note_tasks_in_tasks_view": "Show Note Tasks in Tasks View",
+  "habits.title": "Habits",
+  "habits.enable": "Track habits",
+  "habits.enableDesc": "Adds a Habits view for this vault. Off by default.",
+  "habits.folder": "Habits folder",
+  "habits.folderHint": "Folder inside the vault. Each note in it is a habit; the days you mark are saved in the note’s “entries” property, compatible with Obsidian’s Habit Tracker 21.",
+  "habits.empty": "No habits yet. Create a note in “{folder}” to add one.",
+  "habits.earlier": "Earlier days",
+  "habits.later": "Later days",
+  "habits.new": "New habit",
+  "habits.streak": "Streak",
+  "ui.open_habits": "Open Habits"
 }

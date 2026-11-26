@@ -7,6 +7,7 @@
 	import Sidebar from './Sidebar.svelte';
 	import NoteList from './NoteList.svelte';
 	import Editor from './Editor.svelte';
+	import HabitsView from './HabitsView.svelte';
 	import EditorModePicker from './EditorModePicker.svelte';
 	import { editorMode, selectEditorMode, type EditorMode } from '$lib/editor/mode';
 	import SearchPanel from './SearchPanel.svelte';
@@ -71,6 +72,7 @@
 		platformIsMobile,
 		activeVaultConfig,
 		activateVaultData,
+		habitsFolder,
 	} from '$lib/stores/app';
 	import { keybindings, matchAction } from '$lib/keybindings';
 
@@ -90,7 +92,7 @@
 		tabletNavHidden = hidden;
 		localStorage.setItem('helix-tablet-nav-hidden', hidden ? '1' : '0');
 	}
-	import { openVault, restoreExternalVault, loadVaultState, saveVaultState, readNote, deleteNote, createDailyNote, createBackup, getPendingOpenFile, ackPendingOpenFile, getTasks, openExternalMarkdown, addQuickAccess, removeQuickAccess, getQuickAccess, setTheme, syncNow, gitSyncNow, setTaskDone, setTaskPriority, setTaskDue, setTaskRemind, setTaskRepeat } from '$lib/api';
+	import { openVault, restoreExternalVault, loadVaultState, saveVaultState, readNote, deleteNote, createDailyNote, createBackup, getPendingOpenFile, ackPendingOpenFile, getTasks, openExternalMarkdown, addQuickAccess, removeQuickAccess, getQuickAccess, setTheme, syncNow, gitSyncNow, setTaskDone, setTaskPriority, setTaskDue, setTaskRemind, setTaskRepeat, toggleHabitEntry } from '$lib/api';
 	import { syncNativeReminders, takeReminderNote } from '$lib/utils/native-reminders';
 	import { repeatLabelsFrom } from '$lib/utils/task-recurrence';
 	import { darkThemes, isAndroid, isMobile as isMobileTarget } from '$lib/platform';
@@ -871,6 +873,25 @@
 		await changeTask(task, () => setTaskRepeat(ownerVault!, task.note_path, task.line, task.raw_line, repeat));
 	}
 
+	// Like a task change: a habit note that is open in the editor is reloaded around the write.
+	async function toggleHabit(path: string, date: string): Promise<string[] | null> {
+		if (!ownerIsCurrent()) return null;
+		let entries: string[] | null = null;
+		const operation = async () => { entries = await toggleHabitEntry(ownerVault!, path, date); };
+		if (path === $activeNotePath && editor) await editor.applyNativeTaskChange(path, operation);
+		else await operation();
+		return entries;
+	}
+
+	// Turning habits off (or switching to a vault without them) leaves the habits view.
+	$effect(() => {
+		if ($habitsFolder || $viewMode !== 'habits') return;
+		untrack(() => {
+			$viewMode = 'all';
+			handleViewChanged();
+		});
+	});
+
 	async function handleDailyNote() {
 		const token = beginNavigation();
 		if (!navigationIsCurrent(token)) return;
@@ -1248,6 +1269,7 @@
 			recentChanges.set(note.path, note);
 			if (!noteList) {
 				const key = $viewMode === 'notebook' && $activeNotebook ? `nb:${$activeNotebook.path}` :
+					$viewMode === 'habits' ? `nb:${ownerVault}/${$habitsFolder ?? ''}` :
 					$viewMode === 'tag' && $activeTag ? `tag:${$activeTag}` : $viewMode;
 				const updated = updateNoteList(get(notes), note, key, get(quickAccessPaths));
 				if (updated !== get(notes)) notes.set(updated);
@@ -1516,7 +1538,7 @@
 					{#if $mobileView === 'sidebar'}
 						<VaultSwitcher vaults={$appConfig?.vaults ?? []} active={activeVaultIdentity($appConfig)} busy={vaultSwitchBusy} onselect={vaultSwitch.switchTo} onadd={addVault} onmanage={vaultSwitch.manage} />
 					{:else}
-						{#if $viewMode === 'notebook'}{$activeNotebook?.name ?? 'Notebook'}{:else if $viewMode === 'tag' && $activeTag}<TagLabel name={$activeTag} size={16} />{:else if $viewMode === 'quickaccess'}{$ui("ui.quick_access")}{:else if $viewMode === 'daily'}{$ui("ui.daily_notes")}{:else if $viewMode === 'tasks'}{$ui("ui.tasks")}{:else if $viewMode === 'trash'}{$ui("ui.trash")}{:else}{$ui("ui.all_notes")}{/if}
+						{#if $viewMode === 'notebook'}{$activeNotebook?.name ?? 'Notebook'}{:else if $viewMode === 'tag' && $activeTag}<TagLabel name={$activeTag} size={16} />{:else if $viewMode === 'quickaccess'}{$ui("ui.quick_access")}{:else if $viewMode === 'daily'}{$ui("ui.daily_notes")}{:else if $viewMode === 'tasks'}{$ui("ui.tasks")}{:else if $viewMode === 'habits'}{$ui("habits.title")}{:else if $viewMode === 'trash'}{$ui("ui.trash")}{:else}{$ui("ui.all_notes")}{/if}
 					{/if}
 				</div>
 				{#if $globalUpdateAvailable && $mobileView === 'sidebar'}
@@ -1670,7 +1692,7 @@
 				<Sidebar bind:this={sidebar} onViewChanged={handleViewChanged} onBeforeNoteChange={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} />
 			</div>
 			<div class="mobile-panel" class:active={tabletLayout ? tabletNavShown && $mobileView !== 'sidebar' : $mobileView === 'notelist'}>
-				<NoteList bind:this={noteList} onNoteSelected={handleNoteSelected} onBeforeNoteSwitch={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforeNoteDuplicate={() => editor?.forceSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} onUpdateActiveNote={updateActiveNoteMetadata} onTagsChanged={handleTagsChanged} onRefreshTags={() => { if (!isMobile) void sidebar?.refreshTags(); }} onNoteMoved={() => sidebar?.refresh()} onNoteCreated={(token) => { editor?.focusTitle(token); }} onToggleTask={toggleTask} onSetTaskPriority={changeTaskPriority} onSetTaskDue={changeTaskDue} onSetTaskRemind={changeTaskRemind} onSetTaskRepeat={changeTaskRepeat} />
+				<NoteList bind:this={noteList} onNoteSelected={handleNoteSelected} onBeforeNoteSwitch={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforeNoteDuplicate={() => editor?.forceSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} onUpdateActiveNote={updateActiveNoteMetadata} onTagsChanged={handleTagsChanged} onRefreshTags={() => { if (!isMobile) void sidebar?.refreshTags(); }} onNoteMoved={() => sidebar?.refresh()} onNoteCreated={(token) => { editor?.focusTitle(token); }} onToggleTask={toggleTask} onSetTaskPriority={changeTaskPriority} onSetTaskDue={changeTaskDue} onSetTaskRemind={changeTaskRemind} onSetTaskRepeat={changeTaskRepeat} onToggleHabit={toggleHabit} onNoteReselected={() => { taskNoteOpened = true; }} />
 			</div>
 			<div class="mobile-panel mobile-editor-panel" class:active={$mobileView === 'editor' || tabletLayout}>
 				<Editor bind:this={editor} onMoveToTrash={trashOpenNote} onOutlineChange={handleOutlineChange} onShowTag={showTagNotes} />
@@ -1731,7 +1753,7 @@
 
 				{#if !$notelistCollapsed}
 					<div class="notelist-panel" style="width: {$notelistWidth}px">
-						<NoteList bind:this={noteList} onNoteSelected={handleNoteSelected} onBeforeNoteSwitch={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforeNoteDuplicate={() => editor?.forceSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} onUpdateActiveNote={updateActiveNoteMetadata} onTagsChanged={handleTagsChanged} onRefreshTags={() => { if (!isMobile) void sidebar?.refreshTags(); }} onNoteMoved={() => sidebar?.refresh()} onNoteCreated={(token) => { editor?.focusTitle(token); }} onToggleTask={toggleTask} onSetTaskPriority={changeTaskPriority} onSetTaskDue={changeTaskDue} onSetTaskRemind={changeTaskRemind} onSetTaskRepeat={changeTaskRepeat} />
+						<NoteList bind:this={noteList} onNoteSelected={handleNoteSelected} onBeforeNoteSwitch={() => editor?.flushSave() ?? Promise.resolve(true)} onBeforeNoteDuplicate={() => editor?.forceSave() ?? Promise.resolve(true)} onBeforePathMutation={() => editor?.beginPathMutation() ?? Promise.resolve(() => {})} onPathsMoved={handlePathsMoved} onUpdateActiveNote={updateActiveNoteMetadata} onTagsChanged={handleTagsChanged} onRefreshTags={() => { if (!isMobile) void sidebar?.refreshTags(); }} onNoteMoved={() => sidebar?.refresh()} onNoteCreated={(token) => { editor?.focusTitle(token); }} onToggleTask={toggleTask} onSetTaskPriority={changeTaskPriority} onSetTaskDue={changeTaskDue} onSetTaskRemind={changeTaskRemind} onSetTaskRepeat={changeTaskRepeat} onToggleHabit={toggleHabit} onNoteReselected={() => { taskNoteOpened = true; }} />
 					</div>
 
 					<ResizeHandle onResize={handleNotelistResize} />
@@ -1757,6 +1779,11 @@
 							<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
 						</svg>
 						<p>{$ui("ui.select_a_task_to_open_its_note")}</p>
+					</div>
+				{/if}
+				{#if $viewMode === 'habits' && !taskNoteOpened}
+					<div class="habits-editor-overlay">
+						<HabitsView onOpen={(path) => { if (path === $activeNotePath) taskNoteOpened = true; else void selectNoteFromSwitcher(path); }} onToggle={toggleHabit} onCreate={createAndFocusNote} />
 					</div>
 				{/if}
 			</div>
@@ -1845,6 +1872,13 @@
 		overflow: hidden;
 		min-width: 300px;
 		position: relative;
+	}
+
+	.habits-editor-overlay {
+		position: absolute;
+		inset: 0;
+		z-index: 5;
+		background: var(--bg-primary);
 	}
 
 	.tasks-editor-placeholder {

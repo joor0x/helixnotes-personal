@@ -19,7 +19,8 @@
 		notelistCollapsed,
 		noteOrder,
 		notebooks,
-		mobileView
+		mobileView,
+		habitsFolder
 	} from '$lib/stores/app';
 	import {
 		getNotes,
@@ -50,11 +51,12 @@
 	import { beginNoteNavigation, isCurrentNoteNavigation, cancelNoteNavigation } from '$lib/utils/note-navigation';
 	import type { NoteEntry, NoteMeta, TrashNotebookEntry, SortMode, TaskItem } from '$lib/types';
 	import TasksView from './TasksView.svelte';
+	import HabitsView from './HabitsView.svelte';
 	import TagSuggestInput from './TagSuggestInput.svelte';
 	import TagLabel from './TagLabel.svelte';
 	import { isMobile, isAndroid } from '$lib/platform';
 
-	let { onNoteSelected = (_path: string, _content: string, _task?: TaskItem) => {}, onNoteMoved = () => {}, onBeforeNoteSwitch = async () => true, onBeforeNoteDuplicate = async () => true, onBeforePathMutation = async () => null, onPathsMoved = async (_old: string, _next: string) => {}, onUpdateActiveNote, onTagsChanged, onRefreshTags, onNoteCreated = () => {}, onToggleTask = async (_t: TaskItem) => {}, onSetTaskPriority = async (_t: TaskItem, _p: string | null) => {}, onSetTaskDue = async (_t: TaskItem, _d: string | null) => {}, onSetTaskRemind = async (_t: TaskItem, _r: string | null) => {}, onSetTaskRepeat = async (_t: TaskItem, _r: string | null) => {} }: {
+	let { onNoteSelected = (_path: string, _content: string, _task?: TaskItem) => {}, onNoteMoved = () => {}, onBeforeNoteSwitch = async () => true, onBeforeNoteDuplicate = async () => true, onBeforePathMutation = async () => null, onPathsMoved = async (_old: string, _next: string) => {}, onUpdateActiveNote, onTagsChanged, onRefreshTags, onNoteCreated = () => {}, onToggleTask = async (_t: TaskItem) => {}, onSetTaskPriority = async (_t: TaskItem, _p: string | null) => {}, onSetTaskDue = async (_t: TaskItem, _d: string | null) => {}, onSetTaskRemind = async (_t: TaskItem, _r: string | null) => {}, onSetTaskRepeat = async (_t: TaskItem, _r: string | null) => {}, onToggleHabit = async (_path: string, _date: string): Promise<string[] | null> => null, onNoteReselected = () => {} }: {
 		onNoteSelected?: (path: string, content: string, task?: TaskItem) => void;
 		onNoteMoved?: () => void;
 		onBeforeNoteSwitch?: () => Promise<boolean>;
@@ -70,6 +72,9 @@
 		onSetTaskDue?: (t: TaskItem, d: string | null) => Promise<void>;
 		onSetTaskRemind?: (t: TaskItem, r: string | null) => Promise<void>;
 		onSetTaskRepeat?: (t: TaskItem, r: string | null) => Promise<void>;
+		onToggleHabit?: (path: string, date: string) => Promise<string[] | null>;
+		/** The note that is already open was picked again (it may be behind the habits grid). */
+		onNoteReselected?: () => void;
 	} = $props();
 
 	const modKey = navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl';
@@ -470,6 +475,7 @@
 		if ($viewMode === 'quickaccess') return $ui("ui.quick_access");
 		if ($viewMode === 'daily') return $ui("ui.daily_notes");
 		if ($viewMode === 'tasks') return $ui("ui.tasks");
+		if ($viewMode === 'habits') return $ui("habits.title");
 		if ($viewMode === 'trash') return $ui("ui.trash");
 		return $ui("ui.notes_704400");
 	});
@@ -499,9 +505,16 @@
 		return previous;
 	}
 
+	/** The habits folder as an absolute path: the habits view lists it like a notebook. */
+	function habitsPath(): string | null {
+		const vault = $appConfig?.active_vault;
+		return vault && $habitsFolder ? `${vault}/${$habitsFolder}` : null;
+	}
+
 	function cacheKey(): string {
 		if ($viewMode === 'trash') return 'trash';
 		if ($viewMode === 'daily') return 'daily';
+		if ($viewMode === 'habits') return `nb:${habitsPath() ?? ''}`;
 		if ($viewMode === 'quickaccess') return 'quickaccess';
 		if ($viewMode === 'tag' && $activeTag) return `tag:${$activeTag}`;
 		if ($viewMode === 'notebook' && $activeNotebook) return `nb:${$activeNotebook.path}`;
@@ -517,6 +530,7 @@
 		const key = cacheKey();
 		const mode = $viewMode;
 		const notebookPath = $activeNotebook?.path ?? null;
+		const habitsDir = habitsPath();
 		const tag = $activeTag;
 		const vault = $appConfig?.active_vault;
 		const cached = mode === 'trash' ? undefined : noteCache.get(key);
@@ -537,6 +551,8 @@
 				if (current()) trashNotebooks = trash.notebooks;
 			} else if (mode === 'daily') {
 				list = vault ? await getNotes(`${vault}/Daily`) : [];
+			} else if (mode === 'habits') {
+				list = habitsDir ? await getNotes(habitsDir) : [];
 			} else if (mode === 'quickaccess') {
 				list = await getQuickAccess(ownerVault!);
 			} else if (mode === 'tag' && tag) {
@@ -570,6 +586,7 @@
 	async function selectNote(note: NoteEntry, token = beginNavigation()) {
 		if (!navigationIsCurrent(token)) return;
 		if ($activeNotePath === note.path) {
+			onNoteReselected();
 			if (isMobile) $mobileView = 'editor';
 			return;
 		}
@@ -585,6 +602,11 @@
 		} catch (e) {
 			console.error('Failed to read note:', e);
 		}
+	}
+
+	function openHabit(path: string) {
+		const note = $notes.find((entry) => entry.path === path);
+		if (note) void selectNote(note);
 	}
 
 	async function openTask(task: TaskItem) {
@@ -621,6 +643,8 @@
 		let nbRelative: string | null = null;
 		if ($viewMode === 'notebook' && $activeNotebook) {
 			nbRelative = $activeNotebook.relative_path || null;
+		} else if ($viewMode === 'habits' && $habitsFolder) {
+			nbRelative = $habitsFolder;
 		} else if ($appConfig?.active_vault && $activeNotePath) {
 			const vaultN = $appConfig.active_vault.replace(/\\/g, '/');
 			const apN = $activeNotePath.replace(/\\/g, '/');
@@ -1376,6 +1400,9 @@
 	<div class="list-content" class:tasks-mode={$viewMode === 'tasks'} bind:this={listContainer} onscroll={onListScroll} ondblclick={handleListDoubleClick}>
 		{#if $viewMode === 'tasks'}
 			<TasksView onOpenTask={openTask} onToggleTask={onToggleTask} onSetTaskPriority={onSetTaskPriority} onSetTaskDue={onSetTaskDue} onSetTaskRemind={onSetTaskRemind} onSetTaskRepeat={onSetTaskRepeat} />
+		{/if}
+		{#if $viewMode === 'habits' && isMobile}
+			<HabitsView compact onOpen={openHabit} onToggle={onToggleHabit} />
 		{/if}
 		{#if $viewMode === 'daily'}
 			<div class="cal">

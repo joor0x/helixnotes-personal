@@ -1329,5 +1329,16 @@
   "ui.archive_completed_tasks_in_note": "Archiver les tâches terminées de la note",
   "ui.delete_completed_tasks_in_note": "Supprimer les tâches terminées de la note",
   "ui.hide_note_tasks_from_tasks_view": "Masquer les tâches de la note dans la vue Tâches",
-  "ui.show_note_tasks_in_tasks_view": "Afficher les tâches de la note dans la vue Tâches"
+  "ui.show_note_tasks_in_tasks_view": "Afficher les tâches de la note dans la vue Tâches",
+  "habits.title": "Habitudes",
+  "habits.enable": "Suivre les habitudes",
+  "habits.enableDesc": "Ajoute une vue Habitudes à ce coffre. Désactivé par défaut.",
+  "habits.folder": "Dossier des habitudes",
+  "habits.folderHint": "Dossier dans le coffre. Chaque note qu’il contient est une habitude ; les jours cochés sont enregistrés dans la propriété « entries » de la note, compatible avec Habit Tracker 21 pour Obsidian.",
+  "habits.empty": "Aucune habitude pour l’instant. Créez une note dans « {folder} » pour en ajouter une.",
+  "habits.earlier": "Jours précédents",
+  "habits.later": "Jours suivants",
+  "habits.new": "Nouvelle habitude",
+  "habits.streak": "Série",
+  "ui.open_habits": "Ouvrir les habitudes"
 }

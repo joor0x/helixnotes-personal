@@ -1329,5 +1329,16 @@
   "ui.archive_completed_tasks_in_note": "Voltooide taken in notitie archiveren",
   "ui.delete_completed_tasks_in_note": "Voltooide taken in notitie verwijderen",
   "ui.hide_note_tasks_from_tasks_view": "Taken van notitie verbergen in Takenweergave",
-  "ui.show_note_tasks_in_tasks_view": "Taken van notitie tonen in Takenweergave"
+  "ui.show_note_tasks_in_tasks_view": "Taken van notitie tonen in Takenweergave",
+  "habits.title": "Gewoontes",
+  "habits.enable": "Gewoontes bijhouden",
+  "habits.enableDesc": "Voegt een weergave Gewoontes toe aan deze kluis. Standaard uit.",
+  "habits.folder": "Map voor gewoontes",
+  "habits.folderHint": "Map in de kluis. Elke notitie daarin is een gewoonte; de dagen die je aanvinkt worden opgeslagen in de eigenschap ‘entries’ van de notitie, compatibel met Habit Tracker 21 voor Obsidian.",
+  "habits.empty": "Nog geen gewoontes. Maak een notitie in ‘{folder}’ om er een toe te voegen.",
+  "habits.earlier": "Eerdere dagen",
+  "habits.later": "Latere dagen",
+  "habits.new": "Nieuwe gewoonte",
+  "habits.streak": "Reeks",
+  "ui.open_habits": "Gewoontes openen"
 }
