@@ -5,6 +5,7 @@
 	import { LanguageTool, noteLanguage, canonicalNoteLanguage } from '$lib/editor/languagetool';
 	import { languageToolCheck, setNoteLanguage, bulkNoteTasks, setNoteHideTasks, type BulkTaskAction } from '$lib/api';
 	import ThemedSelect from './ThemedSelect.svelte';
+	import TimeSelect from './TimeSelect.svelte';
 	import { aiImageCandidates, protectAiMedia, restoreAiMedia, type AiImageCandidate } from '$lib/utils/ai-media';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { get } from 'svelte/store';
@@ -2752,7 +2753,8 @@
 	let taskMetaTypedByUser = false;
 	let taskDuePicker = $state<{ x: number; y: number; kind: 'due' | 'dueTime' | 'remind' | 'repeat' } | null>(null);
 	const taskRepeatLabels = $derived(repeatLabelsFrom($ui));
-	let taskDateTimeDraft = $state('');
+	let taskDateDraft = $state('');
+	let taskTimeDraft = $state('');
 	let taskDueInputEl = $state<HTMLInputElement | null>(null);
 	let taskRepeatFirstEl = $state<HTMLButtonElement | null>(null);
 
@@ -2818,7 +2820,8 @@
 			const pad = (n: number) => String(n).padStart(2, '0');
 			// Next full hour, local time.
 			const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1);
-			taskDateTimeDraft = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(next.getHours())}:00`;
+			taskDateDraft = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}`;
+			taskTimeDraft = `${pad(next.getHours())}:00`;
 			taskDuePicker = { x, y, kind: item.kind };
 			const origin = captureOrigin();
 			tick().then(() => { if (taskDuePicker && isOriginCurrent(origin)) { taskDueInputEl?.focus(); taskDueInputEl?.showPicker?.(); } });
@@ -2836,7 +2839,7 @@
 		const kind = taskDuePicker?.kind ?? 'due';
 		taskDuePicker = null;
 		if (!editor) return;
-		// datetime-local may carry seconds; the task syntax uses minutes.
+		// Values are `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`; trim anything past minutes.
 		const token = kind === 'remind' ? 'remind' : 'due';
 		const normalized = kind === 'due' ? value : value.slice(0, 16);
 		if (normalized) editor.chain().focus().insertContent(`${token}:${normalized} `).run();
@@ -9838,16 +9841,17 @@
 			/>
 		{:else}
 			<!-- A date-time is only complete after both parts: confirm with Enter or the button. -->
-			<form class="task-datetime-picker" style="left: {taskDuePicker.x}px; top: {taskDuePicker.y}px" onsubmit={(e) => { e.preventDefault(); applyTaskDue(taskDateTimeDraft); }}>
+			<form class="task-datetime-picker" style="left: {taskDuePicker.x}px; top: {taskDuePicker.y}px" onsubmit={(e) => { e.preventDefault(); applyTaskDue(`${taskDateDraft}T${taskTimeDraft}`); }}>
 				<input
-					type="datetime-local"
+					type="date"
 					class="task-due-input"
 					aria-label={taskDuePicker.kind === 'remind' ? $ui('editor.taskReminder') : $ui('editor.taskDueDateTime')}
 					bind:this={taskDueInputEl}
-					bind:value={taskDateTimeDraft}
+					bind:value={taskDateDraft}
 					onkeydown={(e) => { if (e.key === 'Escape') { taskDuePicker = null; editor?.commands.focus(); } }}
 				/>
-				<button type="submit" disabled={!taskDateTimeDraft}>{$ui('tasks.save')}</button>
+				<TimeSelect label={taskDuePicker.kind === 'remind' ? $ui('editor.taskReminder') : $ui('editor.taskDueDateTime')} bind:value={taskTimeDraft} />
+				<button type="submit" disabled={!taskDateDraft || !taskTimeDraft}>{$ui('tasks.save')}</button>
 			</form>
 		{/if}
 	</div>

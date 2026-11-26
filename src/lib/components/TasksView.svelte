@@ -9,6 +9,7 @@
 	import type { TaskItem, FileEvent } from '$lib/types';
 	import { isCurrentVaultEvent } from '$lib/utils/note-list-updates';
 	import { formatLocalDate } from '$lib/utils/time';
+	import TimeSelect from './TimeSelect.svelte';
 	import { REPEAT_PRESETS, repeatLabel, repeatLabelsFrom } from '$lib/utils/task-recurrence';
 	import { matchesTaskDueFilter, formatLocalTime, taskDueKey, isTaskOverdue, matchesTaskTag, collectTaskTags, composeDue, type TaskDueFilter } from '$lib/utils/task-filter';
 
@@ -193,7 +194,7 @@
 	let dueMenuFor = $state<string | null>(null);
 	let remindMenuFor = $state<string | null>(null);
 	let dueDraft = $state({ date: '', time: '' });
-	let remindDraft = $state('');
+	let remindDraft = $state({ date: '', time: '' });
 	let repeatMenuFor = $state<string | null>(null);
 	const repeatLabels = $derived(repeatLabelsFrom($ui));
 
@@ -217,7 +218,8 @@
 	function openRemindMenu(t: TaskItem) {
 		prioMenuFor = null; dueMenuFor = null; repeatMenuFor = null;
 		// Default: the due time if there is one, else 09:00 on the due date or today.
-		remindDraft = t.remind ?? `${t.due ?? today}T${t.due_time ?? '09:00'}`;
+		const remind = t.remind ?? `${t.due ?? today}T${t.due_time ?? '09:00'}`;
+		remindDraft = { date: remind.slice(0, 10), time: remind.slice(11, 16) };
 		remindMenuFor = remindMenuFor === rowKey(t) ? null : rowKey(t);
 	}
 
@@ -401,7 +403,7 @@
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="due-menu" onclick={(e) => e.stopPropagation()}>
 								<input class="due-input" type="date" aria-label={$ui("ui.set_due_date")} bind:value={dueDraft.date} />
-								<input class="due-input" type="time" aria-label={$ui("tasks.dueTime")} title={$ui("tasks.dueTimeHint")} bind:value={dueDraft.time} />
+								<TimeSelect class="due-input-time" allowEmpty label={$ui("tasks.dueTime")} title={$ui("tasks.dueTimeHint")} bind:value={dueDraft.time} />
 								<div class="due-actions">
 									<button class="prio-opt" disabled={!dueDraft.date} onclick={() => chooseDue(t, composeDue(dueDraft.date, dueDraft.time))}>{$ui("tasks.save")}</button>
 									{#if t.due}<button class="prio-opt prio-clear" onclick={() => chooseDue(t, null)}>{$ui("ui.clear")}</button>{/if}
@@ -424,9 +426,10 @@
 							<!-- svelte-ignore a11y_click_events_have_key_events -->
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="due-menu remind-menu" onclick={(e) => e.stopPropagation()}>
-								<input class="due-input" type="datetime-local" aria-label={$ui("tasks.setReminder")} bind:value={remindDraft} />
+								<input class="due-input" type="date" aria-label={$ui("tasks.setReminder")} bind:value={remindDraft.date} />
+								<TimeSelect class="due-input-time" label={$ui("tasks.setReminder")} bind:value={remindDraft.time} />
 								<div class="due-actions">
-									<button class="prio-opt" disabled={!remindDraft} onclick={() => chooseRemind(t, remindDraft.slice(0, 16))}>{$ui("tasks.save")}</button>
+									<button class="prio-opt" disabled={!remindDraft.date || !remindDraft.time} onclick={() => chooseRemind(t, `${remindDraft.date}T${remindDraft.time}`)}>{$ui("tasks.save")}</button>
 									{#if t.remind}<button class="prio-opt prio-clear" onclick={() => chooseRemind(t, null)}>{$ui("ui.clear")}</button>{/if}
 								</div>
 							</div>
@@ -798,6 +801,7 @@
 		color: var(--text-primary);
 		color-scheme: light dark;
 	}
+	.due-menu :global(.due-input-time) { font-size: 12px; }
 	.task-remind {
 		display: inline-flex;
 		align-items: center;
