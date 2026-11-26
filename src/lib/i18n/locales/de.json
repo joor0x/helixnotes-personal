@@ -1340,5 +1340,22 @@
   "habits.later": "Spätere Tage",
   "habits.new": "Neue Gewohnheit",
   "habits.streak": "Serie",
-  "ui.open_habits": "Gewohnheiten öffnen"
+  "ui.open_habits": "Gewohnheiten öffnen",
+  "organize.action": "Mit KI ordnen",
+  "organize.title": "„{folder}“ ordnen",
+  "organize.intro": "Die KI schlägt für jede Notiz in diesem Ordner ein Notizbuch vor. Nichts wird verschoben, bis du die Vorschläge anwendest.",
+  "organize.sends": "Titel, Tags und die ersten Zeilen jeder Notiz werden an {destination} gesendet.",
+  "organize.start": "Vorschlagen",
+  "organize.preparing": "Wird vorbereitet…",
+  "organize.describingNotebooks": "Neue Notizbücher werden beschrieben…",
+  "organize.readingNotes": "Notizen werden gelesen… {done}/{total}",
+  "organize.summary": "{moves} verschieben · {trash} in den Papierkorb · {stay} bleiben",
+  "organize.leave": "Hier lassen",
+  "organize.empty": "Leer",
+  "organize.destinationFor": "Ziel für {title}",
+  "organize.nothing": "Hier gibt es keine Notizen zum Ordnen.",
+  "organize.unanswered": "{count, plural, one {Die KI hat für # Notiz keine Antwort gegeben; sie bleibt hier.} other {Die KI hat für # Notizen keine Antwort gegeben; sie bleiben hier.}}",
+  "organize.remaining": "{count, plural, one {# weitere Notiz wurde nicht geprüft. Nach dem Anwenden erneut ausführen.} other {# weitere Notizen wurden nicht geprüft. Nach dem Anwenden erneut ausführen.}}",
+  "organize.apply": "{count, plural, one {# Änderung anwenden} other {# Änderungen anwenden}}",
+  "organize.failed": "{count, plural, one {# Notiz konnte nicht verschoben werden.} other {# Notizen konnten nicht verschoben werden.}}"
 }

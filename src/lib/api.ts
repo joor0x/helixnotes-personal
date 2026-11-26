@@ -677,6 +677,39 @@ export async function setHabitsFolder(folder: string | null): Promise<string | n
   return invoke("set_habits_folder", { folder });
 }
 
+// ── Organize ──
+
+export interface OrganizeNotebook { path: string; relative_path: string }
+export interface OrganizeSuggestion {
+  path: string;
+  title: string;
+  action: 'move' | 'trash' | 'keep';
+  /** Destination for `move`: an `OrganizeNotebook.relative_path`. */
+  notebook: string | null;
+  /** The note has no content, so it was not sent to the AI. */
+  empty: boolean;
+}
+export interface OrganizePlan {
+  notebooks: OrganizeNotebook[];
+  suggestions: OrganizeSuggestion[];
+  /** Notes the AI gave no usable answer for; they are listed as `keep`. */
+  unanswered: number;
+  /** Notes beyond the per-run limit, not looked at. */
+  remaining: number;
+}
+/** One accepted suggestion: move the note to `dest` (a notebook path), or to the Trash when `null`. */
+export interface OrganizeChange { path: string; dest: string | null }
+
+/** Ask the AI where each note directly inside `folder` belongs. Changes nothing in the vault. */
+export async function organizePlan(vaultPath: string, folder: string): Promise<OrganizePlan> {
+  return invoke("organize_plan", { vaultPath, folder });
+}
+
+/** Stop the running `organizePlan` before its next AI request. */
+export async function organizeCancel(): Promise<void> {
+  return invoke("organize_cancel");
+}
+
 export async function getGitInfo(): Promise<GitInfo> {
   return invoke("get_git_info");
 }

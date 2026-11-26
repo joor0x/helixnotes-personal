@@ -27,7 +27,7 @@
 		notebookOrder,
 		noteOrder
 	} from '$lib/stores/app';
-	import { getNotebooks, getAllTags, createNotebook, deleteNotebook, renameNotebook, moveNotebook, getNotebookIcons, setNotebookIcon, getTagStyles, importNotebookIcon, getQuickAccess, addQuickAccess, removeQuickAccess, emptyTrash, moveNote, countRootNotes } from '$lib/api';
+	import { getNotebooks, getAllTags, createNotebook, deleteNotebook, renameNotebook, moveNotebook, getNotebookIcons, setNotebookIcon, getTagStyles, importNotebookIcon, getQuickAccess, addQuickAccess, removeQuickAccess, emptyTrash, moveNote, deleteNote, countRootNotes, type OrganizeChange } from '$lib/api';
 	import { open as openDialog } from '@tauri-apps/plugin-dialog';
 	import { readFile } from '@tauri-apps/plugin-fs';
 	import { convertFileSrc } from '@tauri-apps/api/core';
@@ -38,6 +38,7 @@
 	import NotebookGlyph from './NotebookGlyph.svelte';
 	import TagLabel from './TagLabel.svelte';
 	import TagStylePicker from './TagStylePicker.svelte';
+	import OrganizeDialog from './OrganizeDialog.svelte';
 	import {
 		NOTEBOOK_ICON_OPTIONS,
 		COMMON_NOTEBOOK_ICON_COUNT,
@@ -149,6 +150,11 @@
 	// Starts open when the current icon is one of the extra icons.
 	const iconPickerExpanded = $derived(iconPickerShowAll ?? !isCommonNotebookIcon(iconPickerActive));
 	let trashContextMenu = $state<{ x: number; y: number } | null>(null);
+	let unfiledContextMenu = $state<{ x: number; y: number } | null>(null);
+	/** The folder whose notes the Organize dialog is filing; the vault path for unfiled notes. */
+	let organizeTarget = $state<{ path: string; name: string } | null>(null);
+	// Desktop only for now. The dialog and the commands behind it do not depend on the platform.
+	const canOrganize = $derived(!isMobile && !!$appConfig?.ai_provider);
 	let tagsCollapsed = $state(true);
 	let tagContextMenu = $state<{ x: number; y: number; tag: string } | null>(null);
 	let stylePickerTag = $state<string | null>(null);
@@ -753,6 +759,7 @@
 	function onContextMenu(e: MouseEvent, nb: NotebookEntry) {
 		e.preventDefault();
 		const { x, y } = clampMenu(e.clientX, e.clientY);
+		unfiledContextMenu = null;
 		contextMenu = { x, y, notebook: nb };
 	}
 
@@ -795,6 +802,59 @@
 		trashContextMenu = { x, y };
 	}
 
+	function onUnfiledContextMenu(e: MouseEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		if (!canOrganize) return;
+		contextMenu = null;
+		const { x, y } = clampMenu(e.clientX, e.clientY, 200, 60);
+		unfiledContextMenu = { x, y };
+	}
+
+	function startOrganize(path: string, name: string) {
+		contextMenu = null;
+		unfiledContextMenu = null;
+		organizeTarget = { path, name };
+	}
+
+	/** Move or trash the notes accepted in the Organize dialog; resolves to how many failed. */
+	async function applyOrganize(changes: OrganizeChange[]): Promise<number> {
+		const release = await onBeforePathMutation();
+		if (!release) return changes.length;
+		let done = 0;
+		try {
+			for (const change of changes) {
+				if (!ownerIsCurrent()) break;
+				try {
+					if (change.dest === null) {
+						await deleteNote(ownerVault!, change.path);
+						if (!ownerIsCurrent()) break;
+						if ($activeNotePath === change.path) {
+							$activeNote = null;
+							$activeNotePath = null;
+						}
+						$notes = $notes.filter((note) => note.path !== change.path);
+					} else {
+						const newPath = await moveNote(ownerVault!, change.path, change.dest);
+						if (!ownerIsCurrent()) break;
+						migratePaths(change.path, newPath);
+						await onPathsMoved(change.path, newPath);
+					}
+					done++;
+				} catch (error) {
+					console.error('Failed to organize note:', change.path, error);
+				}
+			}
+			if (ownerIsCurrent()) {
+				await refresh();
+				onViewChanged();
+			}
+		} finally {
+			release();
+		}
+		return changes.length - done;
+	}
+
 	async function handleEmptyTrash() {
 		trashContextMenu = null;
 		const previous = $activeNote;
@@ -818,6 +878,7 @@
 	function handleWindowClick() {
 		if (contextMenu) contextMenu = null;
 		if (trashContextMenu) trashContextMenu = null;
+		if (unfiledContextMenu) unfiledContextMenu = null;
 		if (tagContextMenu) tagContextMenu = null;
 	}
 </script>
@@ -1005,6 +1066,7 @@
 						class="notebook-item"
 						class:active={$viewMode === 'notebook' && $activeNotebook?.relative_path === ''}
 						onclick={selectUnfiled}
+						oncontextmenu={onUnfiledContextMenu}
 						style="padding-left: 4px"
 					>
 					<span style="width:14px;flex-shrink:0"></span>
@@ -1103,6 +1165,12 @@
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /></svg>
 			{$notebookIcons[normalizeNotebookIconKey(contextMenu.notebook.relative_path)] ? $ui("ui.change_icon") : $ui("ui.set_icon")}
 		</button>
+		{#if canOrganize}
+			<button onclick={() => startOrganize(contextMenu!.notebook.path, contextMenu!.notebook.name)}>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><path d="M19 15v4" /><path d="M17 17h4" /></svg>
+				{$ui("organize.action")}
+			</button>
+		{/if}
 		<button class="danger" onclick={() => handleDelete(contextMenu!.notebook)}>
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
 			{$ui("ui.delete_action")}
@@ -1218,6 +1286,26 @@
 			{$ui("ui.empty_trash")}
 		</button>
 	</div>
+{/if}
+
+{#if unfiledContextMenu}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="context-menu" style="left: {unfiledContextMenu.x}px; top: {unfiledContextMenu.y}px" onmousedown={(e) => e.stopPropagation()}>
+		<button onclick={() => startOrganize(ownerVault!, $ui("ui.unfiled_notes"))}>
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><path d="M19 15v4" /><path d="M17 17h4" /></svg>
+			{$ui("organize.action")}
+		</button>
+	</div>
+{/if}
+
+{#if organizeTarget}
+	<OrganizeDialog
+		vault={ownerVault!}
+		folder={organizeTarget.path}
+		name={organizeTarget.name}
+		onclose={() => organizeTarget = null}
+		onapply={applyOrganize}
+	/>
 {/if}
 
 {#if deleteConfirm}

@@ -1340,5 +1340,22 @@
   "habits.later": "Dias seguintes",
   "habits.new": "Novo hábito",
   "habits.streak": "Sequência",
-  "ui.open_habits": "Abrir hábitos"
+  "ui.open_habits": "Abrir hábitos",
+  "organize.action": "Organizar com IA",
+  "organize.title": "Organizar «{folder}»",
+  "organize.intro": "A IA sugere um caderno para cada nota desta pasta. Nada é movido até aplicar as sugestões.",
+  "organize.sends": "O título, as etiquetas e as primeiras linhas de cada nota são enviados para {destination}.",
+  "organize.start": "Sugerir",
+  "organize.preparing": "A preparar…",
+  "organize.describingNotebooks": "A descrever os cadernos novos…",
+  "organize.readingNotes": "A ler notas… {done}/{total}",
+  "organize.summary": "{moves} para mover · {trash} para o lixo · {stay} ficam",
+  "organize.leave": "Deixar aqui",
+  "organize.empty": "Vazia",
+  "organize.destinationFor": "Destino de {title}",
+  "organize.nothing": "Não há notas para organizar aqui.",
+  "organize.unanswered": "{count, plural, one {A IA não respondeu sobre # nota; fica aqui.} other {A IA não respondeu sobre # notas; ficam aqui.}}",
+  "organize.remaining": "{count, plural, one {Falta rever # nota. Repita a ação depois de aplicar.} other {Falta rever # notas. Repita a ação depois de aplicar.}}",
+  "organize.apply": "{count, plural, one {Aplicar # alteração} other {Aplicar # alterações}}",
+  "organize.failed": "{count, plural, one {Não foi possível mover # nota.} other {Não foi possível mover # notas.}}"
 }

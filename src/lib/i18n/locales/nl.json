@@ -1340,5 +1340,22 @@
   "habits.later": "Latere dagen",
   "habits.new": "Nieuwe gewoonte",
   "habits.streak": "Reeks",
-  "ui.open_habits": "Gewoontes openen"
+  "ui.open_habits": "Gewoontes openen",
+  "organize.action": "Ordenen met AI",
+  "organize.title": "‘{folder}’ ordenen",
+  "organize.intro": "De AI stelt voor elke notitie in deze map een notitieboek voor. Er wordt niets verplaatst totdat je de voorstellen toepast.",
+  "organize.sends": "De titel, tags en eerste regels van elke notitie worden verzonden naar {destination}.",
+  "organize.start": "Voorstellen",
+  "organize.preparing": "Voorbereiden…",
+  "organize.describingNotebooks": "Nieuwe notitieboeken beschrijven…",
+  "organize.readingNotes": "Notities lezen… {done}/{total}",
+  "organize.summary": "{moves} verplaatsen · {trash} naar de prullenbak · {stay} blijven",
+  "organize.leave": "Hier laten",
+  "organize.empty": "Leeg",
+  "organize.destinationFor": "Bestemming voor {title}",
+  "organize.nothing": "Er zijn hier geen notities om te ordenen.",
+  "organize.unanswered": "{count, plural, one {De AI gaf geen antwoord voor # notitie; die blijft hier.} other {De AI gaf geen antwoord voor # notities; die blijven hier.}}",
+  "organize.remaining": "{count, plural, one {Nog # notitie is niet bekeken. Voer dit opnieuw uit na het toepassen.} other {Nog # notities zijn niet bekeken. Voer dit opnieuw uit na het toepassen.}}",
+  "organize.apply": "{count, plural, one {# wijziging toepassen} other {# wijzigingen toepassen}}",
+  "organize.failed": "{count, plural, one {# notitie kon niet worden verplaatst.} other {# notities konden niet worden verplaatst.}}"
 }

@@ -61,10 +61,14 @@ const OPENAI_API_URL: &str = "https://api.openai.com/v1/chat/completions";
 const OLLAMA_DEFAULT_URL: &str = "http://localhost:11434";
 
 fn request_client() -> Result<Client, String> {
+    client_with_timeout(180)
+}
+
+fn client_with_timeout(seconds: u64) -> Result<Client, String> {
     Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(180))
+        .timeout(std::time::Duration::from_secs(seconds))
         .build()
         .map_err(|_| "Could not initialize AI connection".into())
 }
@@ -270,7 +274,19 @@ async fn stream_anthropic(
     images: &[AiImage],
 ) -> Result<(), String> {
     let client = request_client()?;
+    let response =
+        open_anthropic(&client, api_key, model, system_prompt, user_message, images).await?;
+    receive_stream(app, response, request_id, stream::Protocol::Anthropic).await
+}
 
+async fn open_anthropic(
+    client: &Client,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+    images: &[AiImage],
+) -> Result<reqwest::Response, String> {
     let body = json!({
         "model": model,
         "max_tokens": 4096,
@@ -297,8 +313,7 @@ async fn stream_anthropic(
     if !response.status().is_success() {
         return Err(http_error(response.status()));
     }
-
-    receive_stream(app, response, request_id, stream::Protocol::Anthropic).await
+    Ok(response)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -313,7 +328,28 @@ async fn stream_openai(
     images: &[AiImage],
 ) -> Result<(), String> {
     let client = request_client()?;
+    let response = open_openai(
+        &client,
+        url,
+        api_key,
+        model,
+        system_prompt,
+        user_message,
+        images,
+    )
+    .await?;
+    receive_stream(app, response, request_id, stream::Protocol::OpenAi).await
+}
 
+async fn open_openai(
+    client: &Client,
+    url: &str,
+    api_key: Option<&str>,
+    model: &str,
+    system_prompt: &str,
+    user_message: &str,
+    images: &[AiImage],
+) -> Result<reqwest::Response, String> {
     let mut body = openai_request_body(model, Some(system_prompt), user_message, true, 4096);
     body["messages"][1]["content"] = user_content("openai", user_message, images);
 
@@ -328,8 +364,114 @@ async fn stream_openai(
     if !response.status().is_success() {
         return Err(http_error(response.status()));
     }
+    Ok(response)
+}
 
-    receive_stream(app, response, request_id, stream::Protocol::OpenAi).await
+/// The provider, model and credentials chosen in Settings → AI.
+pub struct Target {
+    provider: String,
+    api_key: String,
+    model: String,
+    /// The server URL, or for CLI providers the optional executable path.
+    base_url: Option<String>,
+}
+
+impl Target {
+    pub fn from_config(config: &crate::types::AppConfig) -> Result<Self, String> {
+        let provider = config
+            .ai_provider
+            .clone()
+            .ok_or("AI is disabled. Choose a provider in Settings.")?;
+        let is_cli = cli::is_cli_provider(&provider);
+        let api_key = match provider.as_str() {
+            _ if is_cli => Some(String::new()),
+            "ollama" => Some(config.ollama_api_key.clone().unwrap_or_default()),
+            "openai_compatible" => {
+                Some(config.openai_compatible_api_key.clone().unwrap_or_default())
+            }
+            "openai" => config.openai_api_key.clone(),
+            "anthropic" => config.ai_api_key.clone(),
+            _ => return Err("Unsupported AI provider".into()),
+        }
+        .ok_or("No API key configured. Go to Settings > AI to set up your API key.")?;
+        let model = config.ai_model.clone();
+        // CLI providers fall back to the CLI's configured default model.
+        if model.trim().is_empty() && !is_cli {
+            return Err("Choose an AI model in Settings before starting".into());
+        }
+        let base_url = match provider.as_str() {
+            p if is_cli => config.ai_cli_paths.get(p).cloned(),
+            "openai_compatible" => config.openai_compatible_base_url.clone(),
+            "ollama" => config.ollama_base_url.clone(),
+            _ => None,
+        };
+        Ok(Self {
+            provider,
+            api_key,
+            model,
+            base_url,
+        })
+    }
+}
+
+/// Ask for one complete text answer, without emitting stream events. For background work that
+/// reads the answer itself (see `organize`); slow local models get the CLI's 5 minute limit.
+pub async fn complete(
+    target: &Target,
+    system_prompt: &str,
+    user_message: &str,
+) -> Result<String, String> {
+    let key = (!target.api_key.is_empty()).then_some(target.api_key.as_str());
+    let base = target.base_url.as_deref();
+    if cli::is_cli_provider(&target.provider) {
+        return cli::run(
+            &target.provider,
+            base,
+            &target.model,
+            system_prompt,
+            user_message,
+        )
+        .await;
+    }
+    let client = client_with_timeout(300)?;
+    let model = target.model.as_str();
+    let (response, protocol) = match target.provider.as_str() {
+        "anthropic" => (
+            open_anthropic(
+                &client,
+                &target.api_key,
+                model,
+                system_prompt,
+                user_message,
+                &[],
+            )
+            .await?,
+            stream::Protocol::Anthropic,
+        ),
+        provider => {
+            let url = match provider {
+                "openai" => OPENAI_API_URL.to_string(),
+                "ollama" => format!(
+                    "{}/v1/chat/completions",
+                    base.unwrap_or(OLLAMA_DEFAULT_URL).trim_end_matches('/')
+                ),
+                _ => {
+                    let base = base.unwrap_or("");
+                    if base.trim().is_empty() {
+                        return Err("No base URL configured for OpenAI Compatible provider".into());
+                    }
+                    format!("{}/v1/chat/completions", normalize_openai_base(base))
+                }
+            };
+            (
+                open_openai(&client, &url, key, model, system_prompt, user_message, &[]).await?,
+                stream::Protocol::OpenAi,
+            )
+        }
+    };
+    let mut text = String::new();
+    stream::receive(response, protocol, |part| text.push_str(&part)).await?;
+    Ok(text)
 }
 
 pub async fn test_connection(

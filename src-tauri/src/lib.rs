@@ -11,6 +11,7 @@ mod image_proxy;
 mod languagetool;
 #[cfg(desktop)]
 pub mod mcp;
+mod organize;
 mod portable;
 mod reminders;
 mod search;
@@ -307,6 +308,8 @@ pub fn run() {
             commands::set_habits_folder,
             habits::get_habits,
             habits::toggle_habit_entry,
+            organize::organize_plan,
+            organize::organize_cancel,
             commands::get_git_info,
             commands::git_sync_now,
             commands::get_install_type,

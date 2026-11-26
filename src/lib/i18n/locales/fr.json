@@ -1340,5 +1340,22 @@
   "habits.later": "Jours suivants",
   "habits.new": "Nouvelle habitude",
   "habits.streak": "Série",
-  "ui.open_habits": "Ouvrir les habitudes"
+  "ui.open_habits": "Ouvrir les habitudes",
+  "organize.action": "Organiser avec l’IA",
+  "organize.title": "Organiser « {folder} »",
+  "organize.intro": "L’IA propose un carnet pour chaque note de ce dossier. Rien n’est déplacé tant que vous n’appliquez pas les suggestions.",
+  "organize.sends": "Le titre, les étiquettes et les premières lignes de chaque note sont envoyés à {destination}.",
+  "organize.start": "Suggérer",
+  "organize.preparing": "Préparation…",
+  "organize.describingNotebooks": "Description des nouveaux carnets…",
+  "organize.readingNotes": "Lecture des notes… {done}/{total}",
+  "organize.summary": "{moves} à déplacer · {trash} à la corbeille · {stay} restent",
+  "organize.leave": "Laisser ici",
+  "organize.empty": "Vide",
+  "organize.destinationFor": "Destination de {title}",
+  "organize.nothing": "Il n’y a aucune note à organiser ici.",
+  "organize.unanswered": "{count, plural, one {L’IA n’a pas répondu pour # note ; elle reste ici.} other {L’IA n’a pas répondu pour # notes ; elles restent ici.}}",
+  "organize.remaining": "{count, plural, one {# autre note n’a pas été examinée. Relancez l’action après avoir appliqué.} other {# autres notes n’ont pas été examinées. Relancez l’action après avoir appliqué.}}",
+  "organize.apply": "{count, plural, one {Appliquer # modification} other {Appliquer # modifications}}",
+  "organize.failed": "{count, plural, one {# note n’a pas pu être déplacée.} other {# notes n’ont pas pu être déplacées.}}"
 }

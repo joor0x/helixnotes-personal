@@ -20,6 +20,7 @@ Features and implementation progress are tracked in GitHub Issues.
 - **Bulk task actions**: check or uncheck all tasks in a note, delete completed tasks, or archive them under a "Done" heading. A frontmatter flag keeps a note's tasks out of the Tasks view.
 - **[Git sync](docs/git-sync.md)**: opt-in per vault, coexists with Syncthing. The repository lives outside the vault, conflicts keep both sides, and sync can run manually, on an interval, on change or on open.
 - **[CLI AI providers](docs/ai-cli-providers.md)**: use a locally installed and signed-in Claude Code, Codex or Gemini CLI as a text-only AI provider (desktop only).
+- **[Organize with AI](docs/organize.md)**: right-click Unfiled Notes or a notebook to have the configured AI provider (Ollama, OpenAI, Anthropic, a CLI…) suggest a notebook for each note, with empty notes proposed for the Trash. You review the list before anything moves (desktop only).
 - **Edit external Markdown files in place**: files opened from outside the vault can be edited and autosave back to the original file, without being copied into the vault.
 - **Search extra folders**: global search can also cover folders outside the vault; results open in place.
 - **Image editing**: resize from the corners, drag to move between blocks, captions from the image title, and an optional name prompt when pasting.

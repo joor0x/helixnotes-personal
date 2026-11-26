@@ -1340,5 +1340,22 @@
   "habits.later": "Later days",
   "habits.new": "New habit",
   "habits.streak": "Streak",
-  "ui.open_habits": "Open Habits"
+  "ui.open_habits": "Open Habits",
+  "organize.action": "Organize with AI",
+  "organize.title": "Organize “{folder}”",
+  "organize.intro": "The AI suggests a notebook for each note in this folder. Nothing moves until you apply the suggestions.",
+  "organize.sends": "The title, tags and first lines of each note are sent to {destination}.",
+  "organize.start": "Suggest",
+  "organize.preparing": "Preparing…",
+  "organize.describingNotebooks": "Describing new notebooks…",
+  "organize.readingNotes": "Reading notes… {done}/{total}",
+  "organize.summary": "{moves} to move · {trash} to Trash · {stay} staying",
+  "organize.leave": "Leave here",
+  "organize.empty": "Empty",
+  "organize.destinationFor": "Destination for {title}",
+  "organize.nothing": "There are no notes here to organize.",
+  "organize.unanswered": "{count, plural, one {The AI gave no answer for # note; it stays here.} other {The AI gave no answer for # notes; they stay here.}}",
+  "organize.remaining": "{count, plural, one {# more note was not looked at. Run this again after applying.} other {# more notes were not looked at. Run this again after applying.}}",
+  "organize.apply": "{count, plural, one {Apply # change} other {Apply # changes}}",
+  "organize.failed": "{count, plural, one {# note could not be moved.} other {# notes could not be moved.}}"
 }
