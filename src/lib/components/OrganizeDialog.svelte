@@ -297,12 +297,33 @@
 	select {
 		width: 100%;
 		min-width: 0;
-		padding: 4px 6px;
+		padding: 4px 24px 4px 8px;
 		border: 1px solid var(--border-color);
 		border-radius: 6px;
-		background: var(--bg-secondary);
+		/* The native control keeps its own light background in WebKitGTK, which hides the
+		   themed text, so the select draws itself, arrow included. */
+		appearance: none;
+		-webkit-appearance: none;
+		background-color: var(--bg-secondary);
+		background-image:
+			linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%),
+			linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
+		background-position: right 12px center, right 8px center;
+		background-size: 4px 4px;
+		background-repeat: no-repeat;
 		color: var(--text-primary);
 		font-size: 12px;
+		text-overflow: ellipsis;
+		cursor: pointer;
+	}
+
+	select option {
+		background: var(--bg-primary);
+		color: var(--text-primary);
+	}
+
+	.rows li.idle select {
+		color: var(--text-secondary);
 	}
 
 	select.trash {
