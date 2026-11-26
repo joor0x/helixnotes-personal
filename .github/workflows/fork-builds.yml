@@ -23,11 +23,13 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
+          # pnpm is enabled in the next step, so setup-node cannot cache it yet.
+          package-manager-cache: false
 
       - name: Enable pnpm
         run: corepack enable
@@ -99,7 +101,7 @@ jobs:
           Compress-Archive -Path $dir -DestinationPath "dist-portable/$name.zip" -Force
           "name=$name" >> $env:GITHUB_OUTPUT
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.package.outputs.name }}
           path: dist-portable/${{ steps.package.outputs.name }}.zip
@@ -110,7 +112,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install system dependencies
         run: |
@@ -119,9 +121,11 @@ jobs:
             libwebkit2gtk-4.1-dev libssl-dev libxdo-dev \
             libayatana-appindicator3-dev librsvg2-dev
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
+          # pnpm is enabled in the next step, so setup-node cannot cache it yet.
+          package-manager-cache: false
 
       - name: Enable pnpm
         run: corepack enable
@@ -152,7 +156,7 @@ jobs:
           ls -l dist-linux
           echo "name=HelixNotes_${version}_linux_x64" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.package.outputs.name }}
           path: dist-linux/*
@@ -163,7 +167,7 @@ jobs:
     needs: [windows-portable, linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
