@@ -26,155 +26,105 @@ Features and implementation progress are tracked in GitHub Issues.
 - **Image editing**: resize from the corners, drag to move between blocks, captions from the image title, and an optional name prompt when pasting.
 - **[Portable mode](docs/fork-build.md)**: a `portable` marker next to the executable keeps all app state in a `data/` folder beside it, with a portable Windows build.
 
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://gitlab.com/ArkHost/HelixNotes/-/blob/main/LICENSE)
-[![Latest Release](https://img.shields.io/badge/release-v1.3.8-green)](https://gitlab.com/ArkHost/HelixNotes/-/releases/v1.3.8)
-[![Website](https://img.shields.io/badge/web-helixnotes.com-purple)](https://helixnotes.com)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS%20%7C%20Android-lightgrey)]()
-
-
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+[![Fork releases](https://img.shields.io/github/v/release/joor0x/helixnotes-personal?label=fork%20release)](https://github.com/joor0x/helixnotes-personal/releases)
+[![Upstream](https://img.shields.io/badge/upstream-HelixNotes%201.3.8-purple)](https://gitlab.com/ArkHost/HelixNotes)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20Android-lightgrey)]()
 
 A local markdown note-taking app built with Tauri, SvelteKit, and Rust.
 
 Your notes are stored as standard Markdown files on your local filesystem.
 No cloud, no lock-in.
 
-## Download (v1.3.8)
+## Download
 
-### Linux
+> **The packages on helixnotes.com, the ArkHost Flatpak/APT/DNF repositories, the AUR
+> and the GitLab releases are upstream HelixNotes, not this fork.** They do not include
+> the features listed above. Get this fork from its own releases or build it yourself.
 
-#### Flatpak
+Fork releases: [github.com/joor0x/helixnotes-personal/releases](https://github.com/joor0x/helixnotes-personal/releases)
 
-Install from the signed ArkHost repository:
+| Platform | How to get it |
+|---|---|
+| Windows | `HelixNotes_<version>_windows_x64_portable.zip` from the releases page. Unzip and run `HelixNotes.exe`; it is [portable](docs/fork-build.md#portable-mode-windows-and-linux). Needs the WebView2 runtime (included in Windows 11 and current Windows 10). |
+| Linux (`.deb`, AppImage) | Build it: `pnpm fork:build:linux` ([details](docs/fork-build.md#linux)). |
+| Linux (Nix) | `nix build github:joor0x/helixnotes-personal`, or use the flake below. |
+| Android | Build and sign the APK: `pnpm fork:build:android` ([details](docs/fork-build.md#android)). |
+| macOS | Not built or tested for this fork. |
 
-```bash
-flatpak install --user https://repo.arkhost.com/flatpak/HelixNotes.flatpakref
-flatpak run com.helixnotes.HelixNotes
-```
+Fork builds have the in-app updater turned off, so they never replace themselves with the
+upstream release. Update by installing a newer fork build over the old one.
 
-Install [Flatpak](https://flatpak.org/setup/) first if it is not already available on your system.
-
-#### AppImage
-
-The AppImage works only on Fedora 43+, Arch Linux, and openSUSE Tumbleweed (x86_64).
-
-[Download AppImage](https://download.helixnotes.com/releases/v1.3.8/HelixNotes_1.3.8_amd64.AppImage)
-
-#### Distro-specific packages
-
-##### Fedora 43+ (DNF)
-
-```bash
-sudo dnf config-manager addrepo \
-  --from-repofile=https://repo.arkhost.com/helixnotes.repo
-sudo dnf install helix-notes
-```
-
-##### Debian / Ubuntu / Mint (APT)
-
-```bash
-curl -fsSL https://repo.arkhost.com/gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/arkhost.gpg && echo "deb [signed-by=/usr/share/keyrings/arkhost.gpg arch=amd64] https://repo.arkhost.com stable main" | sudo tee /etc/apt/sources.list.d/helixnotes.list && sudo apt update && sudo apt install helix-notes
-```
-
-##### Arch / Manjaro (AUR)
-
-```bash
-yay -S helixnotes-appimage-bin
-```
-
-##### Solus (EOPKG)
-
-```bash
-sudo eopkg it helixnotes
-```
-
-##### NixOS
+On Android the fork uses upstream's application ID: uninstall the official HelixNotes APK
+before installing it (vaults in shared storage are kept).
 
 <details>
-<summary>flake.nix</summary>
+<summary>NixOS flake</summary>
 
 ```nix
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    helix-notes = {
-      url = "git+https://gitlab.com/ArkHost/HelixNotes";
-      # inputs.nixpkgs.follows = "nixpkgs";
-    }
+    helix-notes.url = "github:joor0x/helixnotes-personal";
   };
 
-  outputs = {
-    nixpkgs,
-    helix-notes,
-    ...
-  }: let
-    system = "x86_64-linux";
-    pkgs = nixpkgs.legacyPackages.${system};
-  in {
+  outputs = { nixpkgs, helix-notes, ... }: {
     nixosConfigurations.default = nixpkgs.lib.nixosSystem {
-      system = system;
+      system = "x86_64-linux";
       specialArgs = { inherit helix-notes; };
-
-      modules = [
-        /path/to/configuration.nix
-      ];
+      modules = [ /path/to/configuration.nix ];
     };
   };
 }
 ```
-</details>
 
-
-<details>
-<summary>configuration.nix</summary>
+In `configuration.nix`:
 
 ```nix
+{ pkgs, helix-notes, ... }:
 {
-  config,
-  lib,
-  pkgs,
-  helix-notes,
-  ...
-}:
-{
-  users.users.<USERNAME> = {
-    packages = with pkgs; [
-      (helix-notes.packages.${pkgs.stdenv.hostPlatform.system}.default)
-    ];
-  };
+  users.users.<USERNAME>.packages = [
+    helix-notes.packages.${pkgs.stdenv.hostPlatform.system}.default
+  ];
 }
 ```
 </details>
 
-#### Manual package downloads
+## Releasing a new version
 
-- [.deb](https://download.helixnotes.com/releases/v1.3.8/HelixNotes_1.3.8_amd64.deb) (Ubuntu 22.04+)
-- [.rpm](https://download.helixnotes.com/releases/v1.3.8/HelixNotes-1.3.8-1.x86_64.rpm)
+1. **Choose the version.** Fork releases use the version of the upstream base, as
+   `fork-v<version>` (for example `fork-v1.3.8`). For a second release on the same base,
+   add a suffix: `fork-v1.3.8-2`.
+2. **Bump the version** if the upstream base changed (after merging `upstream/main`).
+   It lives in three files, which must match:
+   - `package.json` → `"version"`
+   - `src-tauri/tauri.conf.json` → `"version"`
+   - `src-tauri/Cargo.toml` → `version` (then run `cargo check --manifest-path src-tauri/Cargo.toml` to update `Cargo.lock`)
+3. **Check** that everything passes:
+   ```bash
+   pnpm verify
+   ```
+4. **Tag and push:**
+   ```bash
+   git tag fork-v1.3.8
+   git push origin main fork-v1.3.8
+   ```
+   The [`Windows portable build`](.github/workflows/windows-portable.yml) workflow builds
+   the Windows zip and creates the GitHub release for the tag, with notes generated
+   from the commits.
+5. **Attach the Linux and Android packages** built locally, once the workflow has created the release (see
+   [docs/fork-build.md](docs/fork-build.md)):
+   ```bash
+   pnpm fork:build:linux
+   pnpm fork:build:android
+   gh release upload fork-v1.3.8 \
+     src-tauri/target/release/bundle/deb/HelixNotes_1.3.8_amd64.deb \
+     src-tauri/target/release/bundle/appimage/HelixNotes_1.3.8_amd64.AppImage \
+     src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+   ```
+   Sign the APK with the same keystore every time, or installed copies cannot be updated.
 
-### Windows
-
-[Download Installer](https://download.helixnotes.com/releases/v1.3.8/HelixNotes_1.3.8_x64-setup.exe) (Windows 10/11)
-
-### macOS (v1.3.6)
-
-The macOS 1.3.8 release is delayed. Version 1.3.6 remains available below.
-
-[Download .dmg (Apple Silicon)](https://download.helixnotes.com/releases/v1.3.6/HelixNotes_1.3.6_aarch64.dmg) (M-series Macs)
-
-[Download .dmg (Intel)](https://download.helixnotes.com/releases/v1.3.6/HelixNotes_1.3.6_x64.dmg)
-
-The Apple Silicon build is signed and notarized by Apple. The Intel build may still trigger a Gatekeeper warning. If macOS reports that the Intel build is damaged, run this once after installing or updating it:
-
-```bash
-xattr -cr /Applications/HelixNotes.app
-```
-
-### Android
-
-[Download APK](https://download.helixnotes.com/releases/v1.3.8/HelixNotes_1.3.8_android.apk)
-
----
-
-All releases: [gitlab.com/ArkHost/HelixNotes/-/releases](https://gitlab.com/ArkHost/HelixNotes/-/releases)
+Upstream releases and its own download options: [gitlab.com/ArkHost/HelixNotes/-/releases](https://gitlab.com/ArkHost/HelixNotes/-/releases)
 
 ## Features
 
@@ -224,7 +174,7 @@ Note writes run off the UI thread and replace the file atomically. Unchanged not
 
 With **Close to tray** enabled and a tray icon available, closing the main window hides it after saving. With the setting off, closing the main window closes the application. The close-to-tray setting takes effect immediately; enabling the tray icon itself requires a restart. Explicit **Quit** exits rather than hiding to the tray.
 
-Full documentation: [helixnotes.com/docs](https://helixnotes.com/docs.html)
+Upstream documentation (does not cover the fork's additions): [helixnotes.com/docs](https://helixnotes.com/docs.html)
 
 ## Contributing translations
 
@@ -236,7 +186,7 @@ See the [translation guide and example file](docs/translations/README.md) for pl
 
 - **Frontend**: SvelteKit (Svelte 5) + TailwindCSS v4 + TipTap v3
 - **Backend**: Rust (Tauri 2.0) + Tantivy (search) + Notify (file watcher)
-- **Platforms**: Linux (AppImage), Windows, macOS, Android
+- **Platforms**: Linux (deb, AppImage, Nix), Windows (portable), Android
 
 ## Building from Source
 
@@ -267,9 +217,8 @@ pnpm verify
 
 ### Production Build
 
-```bash
-pnpm tauri build
-```
+Use the `fork:*` scripts (`pnpm fork:build:linux`, `pnpm fork:build:android`); plain
+`pnpm tauri build` needs upstream's updater signing key and fails without it.
 
 ## Screenshots
 
