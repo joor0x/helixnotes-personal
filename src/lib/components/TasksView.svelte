@@ -10,6 +10,7 @@
 	import { isCurrentVaultEvent } from '$lib/utils/note-list-updates';
 	import { formatLocalDate } from '$lib/utils/time';
 	import TimeSelect from './TimeSelect.svelte';
+	import DateSelect from './DateSelect.svelte';
 	import { REPEAT_PRESETS, repeatLabel, repeatLabelsFrom } from '$lib/utils/task-recurrence';
 	import { matchesTaskDueFilter, formatLocalTime, taskDueKey, isTaskOverdue, matchesTaskTag, collectTaskTags, composeDue, type TaskDueFilter } from '$lib/utils/task-filter';
 
@@ -402,7 +403,7 @@
 							<!-- svelte-ignore a11y_click_events_have_key_events -->
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="due-menu" onclick={(e) => e.stopPropagation()}>
-								<input class="due-input" type="date" aria-label={$ui("ui.set_due_date")} bind:value={dueDraft.date} />
+								<DateSelect class="due-input-time" autofocus label={$ui("ui.set_due_date")} bind:value={dueDraft.date} />
 								<TimeSelect class="due-input-time" allowEmpty label={$ui("tasks.dueTime")} title={$ui("tasks.dueTimeHint")} bind:value={dueDraft.time} />
 								<div class="due-actions">
 									<button class="prio-opt" disabled={!dueDraft.date} onclick={() => chooseDue(t, composeDue(dueDraft.date, dueDraft.time))}>{$ui("tasks.save")}</button>
@@ -426,7 +427,7 @@
 							<!-- svelte-ignore a11y_click_events_have_key_events -->
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="due-menu remind-menu" onclick={(e) => e.stopPropagation()}>
-								<input class="due-input" type="date" aria-label={$ui("tasks.setReminder")} bind:value={remindDraft.date} />
+								<DateSelect class="due-input-time" autofocus label={$ui("tasks.setReminder")} bind:value={remindDraft.date} />
 								<TimeSelect class="due-input-time" label={$ui("tasks.setReminder")} bind:value={remindDraft.time} />
 								<div class="due-actions">
 									<button class="prio-opt" disabled={!remindDraft.date || !remindDraft.time} onclick={() => chooseRemind(t, `${remindDraft.date}T${remindDraft.time}`)}>{$ui("tasks.save")}</button>
@@ -791,17 +792,7 @@
 		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 		padding: 6px;
 	}
-	.due-input {
-		font-family: inherit;
-		font-size: 12px;
-		padding: 3px 5px;
-		border: 1px solid var(--border-color);
-		border-radius: 4px;
-		background: var(--bg-secondary);
-		color: var(--text-primary);
-		color-scheme: light dark;
-	}
-	.due-menu :global(.due-input-time) { font-size: 12px; }
+	.due-menu :global(.due-input-time) { font-size: 12px; align-self: flex-start; }
 	.task-remind {
 		display: inline-flex;
 		align-items: center;

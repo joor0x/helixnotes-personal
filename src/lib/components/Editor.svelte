@@ -6,6 +6,7 @@
 	import { languageToolCheck, setNoteLanguage, bulkNoteTasks, setNoteHideTasks, type BulkTaskAction } from '$lib/api';
 	import ThemedSelect from './ThemedSelect.svelte';
 	import TimeSelect from './TimeSelect.svelte';
+	import DateSelect from './DateSelect.svelte';
 	import { aiImageCandidates, protectAiMedia, restoreAiMedia, type AiImageCandidate } from '$lib/utils/ai-media';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { get } from 'svelte/store';
@@ -2755,7 +2756,6 @@
 	const taskRepeatLabels = $derived(repeatLabelsFrom($ui));
 	let taskDateDraft = $state('');
 	let taskTimeDraft = $state('');
-	let taskDueInputEl = $state<HTMLInputElement | null>(null);
 	let taskRepeatFirstEl = $state<HTMLButtonElement | null>(null);
 
 	let taskMetaFiltered = $derived.by(() => {
@@ -2823,14 +2823,6 @@
 			taskDateDraft = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}`;
 			taskTimeDraft = `${pad(next.getHours())}:00`;
 			taskDuePicker = { x, y, kind: item.kind };
-			const origin = captureOrigin();
-			// Auto-open the calendar only for a bare date: with a time field next to it,
-			// WebKitGTK's calendar popover covers the time control.
-			tick().then(() => {
-				if (!taskDuePicker || !isOriginCurrent(origin)) return;
-				taskDueInputEl?.focus();
-				if (taskDuePicker.kind === 'due') taskDueInputEl?.showPicker?.();
-			});
 			return;
 		}
 		editor.chain().focus().deleteRange({ from, to }).insertContent(item.token + ' ').run();
@@ -9837,25 +9829,13 @@
 				{/each}
 			</div>
 		{:else if taskDuePicker.kind === 'due'}
-			<input
-				type="date"
-				class="task-due-input"
-				bind:this={taskDueInputEl}
-				style="left: {taskDuePicker.x}px; top: {taskDuePicker.y}px"
-				onchange={(e) => applyTaskDue((e.currentTarget as HTMLInputElement).value)}
-				onkeydown={(e) => { if (e.key === 'Escape') { taskDuePicker = null; editor?.commands.focus(); } }}
-			/>
+			<div class="task-date-picker" style="left: {taskDuePicker.x}px; top: {taskDuePicker.y}px">
+				<DateSelect open autofocus label={$ui('ui.set_due_date')} bind:value={taskDateDraft} onpick={(v) => applyTaskDue(v)} />
+			</div>
 		{:else}
 			<!-- A date-time is only complete after both parts: confirm with Enter or the button. -->
 			<form class="task-datetime-picker" style="left: {taskDuePicker.x}px; top: {taskDuePicker.y}px" onsubmit={(e) => { e.preventDefault(); applyTaskDue(`${taskDateDraft}T${taskTimeDraft}`); }}>
-				<input
-					type="date"
-					class="task-due-input"
-					aria-label={taskDuePicker.kind === 'remind' ? $ui('editor.taskReminder') : $ui('editor.taskDueDateTime')}
-					bind:this={taskDueInputEl}
-					bind:value={taskDateDraft}
-					onkeydown={(e) => { if (e.key === 'Escape') { taskDuePicker = null; editor?.commands.focus(); } }}
-				/>
+				<DateSelect autofocus label={taskDuePicker.kind === 'remind' ? $ui('editor.taskReminder') : $ui('editor.taskDueDateTime')} bind:value={taskDateDraft} />
 				<TimeSelect label={taskDuePicker.kind === 'remind' ? $ui('editor.taskReminder') : $ui('editor.taskDueDateTime')} bind:value={taskTimeDraft} />
 				<button type="submit" disabled={!taskDateDraft || !taskTimeDraft}>{$ui('tasks.save')}</button>
 			</form>
@@ -13420,16 +13400,9 @@
 		z-index: 1500;
 	}
 
-	.task-due-input {
+	.task-date-picker {
 		position: fixed;
 		z-index: 1501;
-		background: var(--bg-primary);
-		border: 1px solid var(--border-color);
-		border-radius: 6px;
-		padding: 6px 8px;
-		color: var(--text-primary);
-		font: inherit;
-		box-shadow: var(--shadow-lg);
 	}
 
 	.task-datetime-picker {
@@ -13444,7 +13417,6 @@
 		border-radius: 8px;
 		box-shadow: var(--shadow-lg);
 	}
-	.task-datetime-picker .task-due-input { position: static; box-shadow: none; padding: 4px 6px; }
 	.task-datetime-picker button {
 		padding: 5px 10px;
 		border-radius: 6px;
