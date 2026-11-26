@@ -550,8 +550,21 @@ export async function setBackupSettings(
 
 // ── Tasks ──
 
-export async function getTasks(notePath?: string): Promise<TaskItem[]> {
-  return invoke("get_tasks", { notePath: notePath ?? null });
+/** Tasks of the vault (or one note). Notes with `hide-tasks: true` are left out unless `includeHidden`. */
+export async function getTasks(notePath?: string, includeHidden = false): Promise<TaskItem[]> {
+  return invoke("get_tasks", { notePath: notePath ?? null, includeHidden });
+}
+
+export type BulkTaskAction = 'check_all' | 'uncheck_all' | 'delete_completed' | 'archive_completed';
+
+/** Apply a note-wide task action; resolves to how many tasks changed. */
+export async function bulkNoteTasks(vaultPath: string, path: string, action: BulkTaskAction, expectedRaw: string, fallbackLanguage: string | null): Promise<number> {
+  return invoke("bulk_note_tasks", { vaultPath, path, action, expectedRaw, fallbackLanguage });
+}
+
+/** Set (`hide-tasks: true`) or clear the flag that keeps a note's tasks out of the Tasks view. */
+export async function setNoteHideTasks(vaultPath: string, path: string, hide: boolean, expectedRaw: string): Promise<void> {
+  return invoke("set_note_hide_tasks", { vaultPath, path, hide, expectedRaw });
 }
 
 export async function setTaskDone(

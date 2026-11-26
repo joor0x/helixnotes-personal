@@ -1686,7 +1686,9 @@ fn extract_title_fast(raw: &str) -> Option<String> {
 pub async fn get_tasks(
     state: State<'_, AppState>,
     note_path: Option<String>,
+    include_hidden: Option<bool>,
 ) -> Result<Vec<TaskItem>, String> {
+    let include_hidden = include_hidden.unwrap_or(false);
     let vault_path = state
         .config
         .lock()
@@ -1694,16 +1696,27 @@ pub async fn get_tasks(
         .active_vault
         .clone()
         .ok_or("No active vault")?;
-    tauri::async_runtime::spawn_blocking(move || scan_tasks(&vault_path, note_path.as_deref()))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        scan_tasks(&vault_path, note_path.as_deref(), include_hidden)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
-fn scan_tasks(vault_path: &str, note_path: Option<&str>) -> Result<Vec<TaskItem>, String> {
+/// Tasks of every note, or of one note. Notes with `hide-tasks: true` give none unless
+/// `include_hidden` (reminders still need them).
+fn scan_tasks(
+    vault_path: &str,
+    note_path: Option<&str>,
+    include_hidden: bool,
+) -> Result<Vec<TaskItem>, String> {
     use rayon::prelude::*;
 
     if let Some(path) = note_path {
         let note = operations::read_vault_note(vault_path, path)?;
+        if !include_hidden && crate::task_bulk::hides_tasks(&note.raw) {
+            return Ok(Vec::new());
+        }
         return Ok(parse_note_tasks(
             path,
             &note.meta.title,
@@ -1718,6 +1731,9 @@ fn scan_tasks(vault_path: &str, note_path: Option<&str>) -> Result<Vec<TaskItem>
             let Ok(raw) = std::fs::read_to_string(path) else {
                 return Vec::new();
             };
+            if !include_hidden && crate::task_bulk::hides_tasks(&raw) {
+                return Vec::new();
+            }
             let filename = path.file_name().unwrap_or_default().to_string_lossy();
             let (meta, body) = crate::vault::frontmatter::parse_note(&raw, &filename);
             parse_note_tasks(&path.to_string_lossy(), &meta.title, &body, &meta.tags)
@@ -1950,7 +1966,7 @@ mod dot_named_vault_tests {
         assert_eq!(scan_all_note_titles(vault_path).unwrap().len(), 2);
         let graph = scan_graph_data(vault_path).unwrap();
         assert_eq!((graph.nodes.len(), graph.edges.len()), (2, 1));
-        assert_eq!(scan_tasks(vault_path, None).unwrap().len(), 1);
+        assert_eq!(scan_tasks(vault_path, None, false).unwrap().len(), 1);
     }
 }
 
@@ -2006,6 +2022,7 @@ mod task_tests {
         let tasks = scan_tasks(
             &vault.path().to_string_lossy(),
             Some(&selected.to_string_lossy()),
+            false,
         )
         .unwrap();
 
@@ -2022,9 +2039,33 @@ mod task_tests {
         assert!(scan_tasks(
             &vault.path().to_string_lossy(),
             Some(&selected.to_string_lossy()),
+            false,
         )
         .unwrap()
         .is_empty());
+    }
+
+    #[test]
+    fn notes_with_hide_tasks_stay_out_of_the_task_scan_unless_asked() {
+        let vault = tempfile::tempdir().unwrap();
+        let checklist = vault.path().join("Checklist.md");
+        std::fs::write(
+            &checklist,
+            "---\ntitle: Checklist\nhide-tasks: true\n---\n- [ ] Llaves\n",
+        )
+        .unwrap();
+        std::fs::write(vault.path().join("Real.md"), "- [ ] Real task\n").unwrap();
+        let vault_path = vault.path().to_string_lossy();
+        let path = checklist.to_string_lossy();
+
+        let all = scan_tasks(&vault_path, None, false).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].text, "Real task");
+        assert!(scan_tasks(&vault_path, Some(&path), false)
+            .unwrap()
+            .is_empty());
+        assert_eq!(scan_tasks(&vault_path, None, true).unwrap().len(), 2);
+        assert_eq!(scan_tasks(&vault_path, Some(&path), true).unwrap().len(), 1);
     }
 
     #[test]
@@ -2035,7 +2076,12 @@ mod task_tests {
         let outside = root.path().join("Outside.md");
         std::fs::write(&outside, "- [ ] Outside task\n").unwrap();
 
-        assert!(scan_tasks(&vault.to_string_lossy(), Some(&outside.to_string_lossy())).is_err());
+        assert!(scan_tasks(
+            &vault.to_string_lossy(),
+            Some(&outside.to_string_lossy()),
+            false
+        )
+        .is_err());
     }
 }
 

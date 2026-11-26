@@ -1316,5 +1316,18 @@
   "gitSync.pulled": "{count, plural, one {# archivo recibido} other {# archivos recibidos}}",
   "gitSync.untracked": "{count, plural, one {# archivo quitado del repositorio} other {# archivos quitados del repositorio}}",
   "gitSync.pushed": "enviado",
-  "gitSync.title": "Git"
+  "gitSync.title": "Git",
+  "tasks.hideFromTasksView": "Ocultar en la vista Tareas",
+  "tasks.checkAll": "Marcar todas",
+  "tasks.uncheckAll": "Desmarcar todas",
+  "tasks.archiveCompleted": "Archivar completadas",
+  "tasks.deleteCompleted": "Borrar completadas",
+  "tasks.bulkChanged": "{count, plural, one {# tarea actualizada} other {# tareas actualizadas}}",
+  "tasks.bulkNothing": "No hay tareas que cambiar",
+  "ui.check_all_tasks_in_note": "Marcar todas las tareas de la nota",
+  "ui.uncheck_all_tasks_in_note": "Desmarcar todas las tareas de la nota",
+  "ui.archive_completed_tasks_in_note": "Archivar tareas completadas de la nota",
+  "ui.delete_completed_tasks_in_note": "Borrar tareas completadas de la nota",
+  "ui.hide_note_tasks_from_tasks_view": "Ocultar tareas de la nota en la vista Tareas",
+  "ui.show_note_tasks_in_tasks_view": "Mostrar tareas de la nota en la vista Tareas"
 }

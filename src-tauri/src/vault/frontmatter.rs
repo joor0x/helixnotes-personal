@@ -322,13 +322,72 @@ pub fn replace_body_keeping_frontmatter(raw: &str, body: &str) -> String {
 /// and every other key. A `language` alias is replaced by `lang`. A note without
 /// frontmatter gets a minimal block only when a language is set.
 pub fn set_frontmatter_language(raw: &str, language: Option<&str>) -> Result<String, String> {
+    set_frontmatter_key(
+        raw,
+        &["lang", "language"],
+        language.map(|language| ("lang", language.into())),
+    )
+}
+
+/// The frontmatter key that keeps a note's tasks out of the Tasks view. Absent means shown.
+pub const HIDE_TASKS_KEY: &str = "hide-tasks";
+
+/// Set `hide-tasks: true`, or with `false` remove the key (shown is the default), keeping the
+/// body bytes and every other key.
+pub fn set_frontmatter_hide_tasks(raw: &str, hide: bool) -> Result<String, String> {
+    set_frontmatter_key(
+        raw,
+        &[HIDE_TASKS_KEY],
+        hide.then(|| (HIDE_TASKS_KEY, serde_yaml::Value::Bool(true))),
+    )
+}
+
+/// Whether the note's frontmatter has `hide-tasks` set to a true value (`true`, `yes`, `on`, `1`).
+/// Only the frontmatter is looked at, and its YAML is parsed only when the key appears in it.
+pub fn frontmatter_hides_tasks(raw: &str) -> bool {
+    let rest = raw.strip_prefix('\u{FEFF}').unwrap_or(raw);
+    let Some((open_len, yaml_end, _)) = frontmatter_fences(rest) else {
+        return false;
+    };
+    let yaml = &rest[open_len..yaml_end];
+    if !yaml.contains(HIDE_TASKS_KEY) {
+        return false;
+    }
+    let Ok(mapping) = serde_yaml::from_str::<serde_yaml::Mapping>(yaml) else {
+        return false;
+    };
+    match mapping.get(HIDE_TASKS_KEY) {
+        Some(serde_yaml::Value::Bool(flag)) => *flag,
+        Some(serde_yaml::Value::Number(number)) => number.as_f64().is_some_and(|n| n != 0.0),
+        Some(serde_yaml::Value::String(word)) => matches!(
+            word.trim().to_ascii_lowercase().as_str(),
+            "true" | "yes" | "on" | "1"
+        ),
+        _ => false,
+    }
+}
+
+/// Replace the frontmatter keys in `remove` with `insert` (or just remove them), keeping the
+/// body bytes and every other key. A note without frontmatter gets a minimal block only when
+/// something is inserted.
+fn set_frontmatter_key(
+    raw: &str,
+    remove: &[&str],
+    insert: Option<(&str, serde_yaml::Value)>,
+) -> Result<String, String> {
     let (bom, rest) = match raw.strip_prefix('\u{FEFF}') {
         Some(rest) => ("\u{FEFF}", rest),
         None => ("", raw),
     };
     let Some((open_len, yaml_end, body_start)) = frontmatter_fences(rest) else {
-        return Ok(match language {
-            Some(language) => format!("---\nlang: {language}\n---\n{raw}"),
+        return Ok(match insert {
+            Some((key, value)) => {
+                let mut mapping = serde_yaml::Mapping::new();
+                mapping.insert(key.into(), value);
+                let yaml = serde_yaml::to_string(&serde_yaml::Value::Mapping(mapping))
+                    .map_err(|_| "Could not write the note's frontmatter")?;
+                format!("---\n{yaml}---\n{raw}")
+            }
             None => raw.to_string(),
         });
     };
@@ -338,10 +397,11 @@ pub fn set_frontmatter_language(raw: &str, language: Option<&str>) -> Result<Str
     } else {
         serde_yaml::from_str(yaml).map_err(|_| "The note's frontmatter is not valid YAML")?
     };
-    mapping.remove("lang");
-    mapping.remove("language");
-    if let Some(language) = language {
-        mapping.insert("lang".into(), language.into());
+    for key in remove {
+        mapping.remove(*key);
+    }
+    if let Some((key, value)) = insert {
+        mapping.insert(key.into(), value);
     }
     let yaml = if mapping.is_empty() {
         String::new()
@@ -789,6 +849,46 @@ mod tests {
             "# New\n\n## Section"
         );
         assert!(update_note_raw(&meta("New"), "\n").ends_with("---\n\n"));
+    }
+}
+
+#[cfg(test)]
+mod hide_tasks_tests {
+    use super::{frontmatter_hides_tasks, set_frontmatter_hide_tasks};
+
+    #[test]
+    fn hide_tasks_is_set_removed_and_read_without_touching_other_keys() {
+        let raw = "---\nid: abc\ntitle: Lista\ntags:\n- casa\n---\n# Lista\n\n- [ ] Llaves\n";
+        assert!(!frontmatter_hides_tasks(raw));
+        let hidden = set_frontmatter_hide_tasks(raw, true).unwrap();
+        assert!(frontmatter_hides_tasks(&hidden));
+        assert!(hidden.contains("hide-tasks: true\n"));
+        assert!(hidden.contains("title: Lista\n"));
+        assert!(hidden.ends_with("---\n# Lista\n\n- [ ] Llaves\n"));
+        let shown = set_frontmatter_hide_tasks(&hidden, false).unwrap();
+        assert!(!shown.contains("hide-tasks"));
+        assert!(!frontmatter_hides_tasks(&shown));
+    }
+
+    #[test]
+    fn hide_tasks_reads_common_spellings_and_ignores_the_body() {
+        assert!(frontmatter_hides_tasks("---\nhide-tasks: yes\n---\nx"));
+        assert!(frontmatter_hides_tasks(
+            "\u{FEFF}---\r\nhide-tasks: \"true\"\r\n---\r\nx"
+        ));
+        assert!(!frontmatter_hides_tasks("---\nhide-tasks: false\n---\nx"));
+        assert!(!frontmatter_hides_tasks(
+            "---\ntitle: a\n---\nhide-tasks: true\n"
+        ));
+        assert!(!frontmatter_hides_tasks("hide-tasks: true\n"));
+        assert_eq!(
+            set_frontmatter_hide_tasks("Hola\n", true).unwrap(),
+            "---\nhide-tasks: true\n---\nHola\n"
+        );
+        assert_eq!(
+            set_frontmatter_hide_tasks("Hola\n", false).unwrap(),
+            "Hola\n"
+        );
     }
 }
 

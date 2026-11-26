@@ -16,6 +16,7 @@ mod search;
 mod search_folders;
 mod state;
 mod sync;
+mod task_bulk;
 mod types;
 mod vault;
 
@@ -239,6 +240,8 @@ pub fn run() {
             commands::set_task_due,
             commands::set_task_remind,
             commands::set_task_repeat,
+            task_bulk::set_note_hide_tasks,
+            task_bulk::bulk_note_tasks,
             commands::set_reminder_notifications,
             commands::search_notes,
             search_folders::add_search_folder,

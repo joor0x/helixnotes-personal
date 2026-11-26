@@ -1316,5 +1316,18 @@
   "gitSync.pulled": "{count, plural, one {# file received} other {# files received}}",
   "gitSync.untracked": "{count, plural, one {# file removed from the repository} other {# files removed from the repository}}",
   "gitSync.pushed": "pushed",
-  "gitSync.title": "Git"
+  "gitSync.title": "Git",
+  "tasks.hideFromTasksView": "Hide from Tasks view",
+  "tasks.checkAll": "Check all",
+  "tasks.uncheckAll": "Uncheck all",
+  "tasks.archiveCompleted": "Archive completed",
+  "tasks.deleteCompleted": "Delete completed",
+  "tasks.bulkChanged": "{count, plural, one {# task updated} other {# tasks updated}}",
+  "tasks.bulkNothing": "No tasks to change",
+  "ui.check_all_tasks_in_note": "Check All Tasks in Note",
+  "ui.uncheck_all_tasks_in_note": "Uncheck All Tasks in Note",
+  "ui.archive_completed_tasks_in_note": "Archive Completed Tasks in Note",
+  "ui.delete_completed_tasks_in_note": "Delete Completed Tasks in Note",
+  "ui.hide_note_tasks_from_tasks_view": "Hide Note Tasks from Tasks View",
+  "ui.show_note_tasks_in_tasks_view": "Show Note Tasks in Tasks View"
 }

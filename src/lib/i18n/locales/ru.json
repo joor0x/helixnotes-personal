@@ -1316,5 +1316,18 @@
   "gitSync.pulled": "{count, plural, one {# файл получен} few {# файла получено} many {# файлов получено} other {# файла получено}}",
   "gitSync.untracked": "{count, plural, one {# файл удалён из репозитория} few {# файла удалено из репозитория} many {# файлов удалено из репозитория} other {# файла удалено из репозитория}}",
   "gitSync.pushed": "отправлено",
-  "gitSync.title": "Git"
+  "gitSync.title": "Git",
+  "tasks.hideFromTasksView": "Скрыть в разделе «Задачи»",
+  "tasks.checkAll": "Отметить все",
+  "tasks.uncheckAll": "Снять все отметки",
+  "tasks.archiveCompleted": "Архивировать выполненные",
+  "tasks.deleteCompleted": "Удалить выполненные",
+  "tasks.bulkChanged": "{count, plural, one {# задача обновлена} few {# задачи обновлены} many {# задач обновлено} other {# задачи обновлены}}",
+  "tasks.bulkNothing": "Нет задач для изменения",
+  "ui.check_all_tasks_in_note": "Отметить все задачи заметки",
+  "ui.uncheck_all_tasks_in_note": "Снять отметки со всех задач заметки",
+  "ui.archive_completed_tasks_in_note": "Архивировать выполненные задачи заметки",
+  "ui.delete_completed_tasks_in_note": "Удалить выполненные задачи заметки",
+  "ui.hide_note_tasks_from_tasks_view": "Скрыть задачи заметки в разделе «Задачи»",
+  "ui.show_note_tasks_in_tasks_view": "Показать задачи заметки в разделе «Задачи»"
 }

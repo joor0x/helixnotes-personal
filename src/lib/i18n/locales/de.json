@@ -1316,5 +1316,18 @@
   "gitSync.pulled": "{count, plural, one {# Datei empfangen} other {# Dateien empfangen}}",
   "gitSync.untracked": "{count, plural, one {# Datei aus dem Repository entfernt} other {# Dateien aus dem Repository entfernt}}",
   "gitSync.pushed": "gepusht",
-  "gitSync.title": "Git"
+  "gitSync.title": "Git",
+  "tasks.hideFromTasksView": "In der Aufgabenansicht ausblenden",
+  "tasks.checkAll": "Alle abhaken",
+  "tasks.uncheckAll": "Alle Haken entfernen",
+  "tasks.archiveCompleted": "Erledigte archivieren",
+  "tasks.deleteCompleted": "Erledigte löschen",
+  "tasks.bulkChanged": "{count, plural, one {# Aufgabe aktualisiert} other {# Aufgaben aktualisiert}}",
+  "tasks.bulkNothing": "Keine Aufgaben zu ändern",
+  "ui.check_all_tasks_in_note": "Alle Aufgaben der Notiz abhaken",
+  "ui.uncheck_all_tasks_in_note": "Bei allen Aufgaben der Notiz Haken entfernen",
+  "ui.archive_completed_tasks_in_note": "Erledigte Aufgaben der Notiz archivieren",
+  "ui.delete_completed_tasks_in_note": "Erledigte Aufgaben der Notiz löschen",
+  "ui.hide_note_tasks_from_tasks_view": "Aufgaben der Notiz in der Aufgabenansicht ausblenden",
+  "ui.show_note_tasks_in_tasks_view": "Aufgaben der Notiz in der Aufgabenansicht anzeigen"
 }

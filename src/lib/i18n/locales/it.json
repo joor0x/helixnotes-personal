@@ -1316,5 +1316,18 @@
   "gitSync.pulled": "{count, plural, one {# file ricevuto} other {# file ricevuti}}",
   "gitSync.untracked": "{count, plural, one {# file rimosso dal repository} other {# file rimossi dal repository}}",
   "gitSync.pushed": "inviato",
-  "gitSync.title": "Git"
+  "gitSync.title": "Git",
+  "tasks.hideFromTasksView": "Nascondi nella vista Attività",
+  "tasks.checkAll": "Spunta tutte",
+  "tasks.uncheckAll": "Togli tutte le spunte",
+  "tasks.archiveCompleted": "Archivia completate",
+  "tasks.deleteCompleted": "Elimina completate",
+  "tasks.bulkChanged": "{count, plural, one {# attività aggiornata} other {# attività aggiornate}}",
+  "tasks.bulkNothing": "Nessuna attività da modificare",
+  "ui.check_all_tasks_in_note": "Spunta tutte le attività della nota",
+  "ui.uncheck_all_tasks_in_note": "Togli la spunta a tutte le attività della nota",
+  "ui.archive_completed_tasks_in_note": "Archivia le attività completate della nota",
+  "ui.delete_completed_tasks_in_note": "Elimina le attività completate della nota",
+  "ui.hide_note_tasks_from_tasks_view": "Nascondi le attività della nota nella vista Attività",
+  "ui.show_note_tasks_in_tasks_view": "Mostra le attività della nota nella vista Attività"
 }

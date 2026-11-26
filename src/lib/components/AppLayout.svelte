@@ -225,7 +225,7 @@
 			if (!ownerIsCurrent()) return;
 			try {
 				const enabled = get(appConfig)?.reminder_notifications ?? true;
-				const tasks = enabled ? await getTasks() : [];
+				const tasks = enabled ? await getTasks(undefined, true) : [];
 				if (!ownerIsCurrent()) return;
 				syncNativeReminders(tasks, {
 					channel: $ui('reminders.channel'),
@@ -1765,7 +1765,14 @@
 {/if}
 
 <SearchPanel onSelectNote={selectNoteFromSearch} />
-<CommandPalette onNavigate={handleViewChanged} />
+<CommandPalette
+	onNavigate={handleViewChanged}
+	noteTasks={{
+		run: (action) => { void editor?.runNoteTaskAction(action).then(() => scheduleReminderSync()); },
+		setHidden: (hide) => { void editor?.setActiveNoteHidesTasks(hide); },
+		hidden: () => editor?.activeNoteTasksHidden() ?? false,
+	}}
+/>
 <SettingsPanel onBeforeVaultSwitch={prepareVaultSwitch} />
 </div>
 {#if vaultSwitchBusy}<div class="vault-transition-status" role="status">{$ui('vaultSwitcher.switching')}</div>{/if}

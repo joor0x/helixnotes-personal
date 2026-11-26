@@ -3,7 +3,7 @@
 	import AiImageOptions from './AiImageOptions.svelte';
 	import { isCliProvider } from '$lib/ai-cli';
 	import { LanguageTool, noteLanguage, canonicalNoteLanguage } from '$lib/editor/languagetool';
-	import { languageToolCheck, setNoteLanguage } from '$lib/api';
+	import { languageToolCheck, setNoteLanguage, bulkNoteTasks, setNoteHideTasks, type BulkTaskAction } from '$lib/api';
 	import ThemedSelect from './ThemedSelect.svelte';
 	import { aiImageCandidates, protectAiMedia, restoreAiMedia, type AiImageCandidate } from '$lib/utils/ai-media';
 	import { onDestroy, tick, untrack } from 'svelte';
@@ -820,6 +820,56 @@
 		languageToolError = message.replace(/^Error:\s*/, '');
 		if (languageToolErrorTimer) clearTimeout(languageToolErrorTimer);
 		languageToolErrorTimer = setTimeout(() => { languageToolError = null; }, 6000);
+	}
+
+	// Note-wide task actions (Info panel and command palette). Native edit of the open note:
+	// save first, change the file, then reload it, as with the note language.
+	const activeNoteHidesTasks = $derived($activeNote ? /^hide-tasks[ \t]*:[ \t]*["']?(?:true|yes|on|1)["']?[ \t]*(?:#.*)?$/mi.test(splitSnapshot($activeNote.raw).metadata ?? '') : false);
+	let noteTasksBusy = $state(false);
+	let noteTasksToast = $state<string | null>(null);
+	let noteTasksToastTimer: ReturnType<typeof setTimeout> | null = null;
+	function showNoteTasksToast(message: string) {
+		noteTasksToast = message;
+		if (noteTasksToastTimer) clearTimeout(noteTasksToastTimer);
+		noteTasksToastTimer = setTimeout(() => { noteTasksToast = null; }, 3500);
+	}
+	function noteTasksUnavailable() {
+		return noteTasksBusy || !$activeNotePath || !$appConfig?.active_vault || !!$viewerNote || $readOnly || $viewMode === 'trash';
+	}
+
+	export async function runNoteTaskAction(action: BulkTaskAction): Promise<void> {
+		const path = $activeNotePath, vault = $appConfig?.active_vault;
+		if (!path || !vault || noteTasksUnavailable()) return;
+		noteTasksBusy = true;
+		let changed = 0;
+		try {
+			await applyNativeTaskChange(path, async () => {
+				changed = await bulkNoteTasks(vault, path, action, saves.raw, $locale);
+			});
+			showNoteTasksToast(changed ? $ui('tasks.bulkChanged', { count: changed }) : $ui('tasks.bulkNothing'));
+		} catch (error) {
+			showNoteTasksToast(String(error).replace(/^Error:\s*/, ''));
+		} finally {
+			noteTasksBusy = false;
+		}
+	}
+
+	export async function setActiveNoteHidesTasks(hide: boolean): Promise<void> {
+		const path = $activeNotePath, vault = $appConfig?.active_vault;
+		if (!path || !vault || noteTasksUnavailable() || hide === activeNoteHidesTasks) return;
+		noteTasksBusy = true;
+		try {
+			await applyNativeTaskChange(path, () => setNoteHideTasks(vault, path, hide, saves.raw));
+			editor?.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
+		} catch (error) {
+			showNoteTasksToast(String(error).replace(/^Error:\s*/, ''));
+		} finally {
+			noteTasksBusy = false;
+		}
+	}
+
+	export function activeNoteTasksHidden(): boolean {
+		return activeNoteHidesTasks;
 	}
 
 	// Math insert/edit modal (opened by /math slash command or double-click on existing math node)
@@ -8932,6 +8982,27 @@
 						</div>
 					{/if}
 
+					{#if !$viewerNote && $viewMode !== 'trash'}
+						<div class="info-section info-note-tasks">
+							<span class="info-section-label">{$ui("ui.tasks")}</span>
+							<label class="info-hide-tasks">
+								<input
+									type="checkbox"
+									checked={activeNoteHidesTasks}
+									disabled={noteTasksBusy || $readOnly}
+									onchange={(event) => setActiveNoteHidesTasks(event.currentTarget.checked)}
+								/>
+								<span>{$ui("tasks.hideFromTasksView")}</span>
+							</label>
+							<div class="info-task-actions">
+								<button type="button" disabled={noteTasksBusy || $readOnly} onclick={() => runNoteTaskAction('check_all')}>{$ui("tasks.checkAll")}</button>
+								<button type="button" disabled={noteTasksBusy || $readOnly} onclick={() => runNoteTaskAction('uncheck_all')}>{$ui("tasks.uncheckAll")}</button>
+								<button type="button" disabled={noteTasksBusy || $readOnly} onclick={() => runNoteTaskAction('archive_completed')}>{$ui("tasks.archiveCompleted")}</button>
+								<button type="button" class="danger" disabled={noteTasksBusy || $readOnly} onclick={() => runNoteTaskAction('delete_completed')}>{$ui("tasks.deleteCompleted")}</button>
+							</div>
+						</div>
+					{/if}
+
 					{#key $activeNotePath}
 						<details class="info-section info-frontmatter">
 							<summary class="info-section-label">{$ui("ui.frontmatter")}</summary>
@@ -9441,6 +9512,10 @@
 			</div>
 		</div>
 	</div>
+{/if}
+
+{#if noteTasksToast}
+	<div class="copy-toast" role="status">{noteTasksToast}</div>
 {/if}
 
 {#if languageToolError}
@@ -14269,6 +14344,15 @@
 
 	.info-frontmatter { flex-shrink: 0; }
 	.info-note-language { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+	.info-note-tasks { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+	.info-hide-tasks { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+	.info-hide-tasks input { margin: 0; accent-color: var(--accent); }
+	.info-task-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+	.info-task-actions button { min-height: 30px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 6px; background: transparent; color: var(--text-primary); font: inherit; font-size: 12px; cursor: pointer; }
+	.info-task-actions button:hover:not(:disabled) { background: var(--bg-hover, color-mix(in srgb, var(--accent) 8%, transparent)); }
+	.info-task-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.info-task-actions button:disabled { opacity: 0.45; cursor: default; }
+	.info-task-actions button.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, var(--border-color)); }
 	.info-frontmatter > summary { cursor: pointer; margin-bottom: 0; padding: 2px 0; border-radius: 4px; }
 	.info-frontmatter[open] > summary { margin-bottom: 8px; }
 	.info-frontmatter > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

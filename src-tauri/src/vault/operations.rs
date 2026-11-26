@@ -924,6 +924,26 @@ pub fn set_note_language(
     Ok(())
 }
 
+/// Set or clear the note's `hide-tasks` frontmatter flag. Same conflict rule as the language.
+pub fn set_note_hide_tasks(
+    vault_path: &str,
+    path: &str,
+    hide: bool,
+    expected_raw: &str,
+) -> Result<(), String> {
+    let validated = ensure_note_path(vault_path, Path::new(path))?;
+    let target = canonicalize_path(&validated, "note path")?;
+    let existing = read_note_content(&target, path)?;
+    if existing.raw != expected_raw {
+        return Err("Save conflict: note changed on disk. Reopen the note and try again.".into());
+    }
+    let raw = frontmatter::set_frontmatter_hide_tasks(&existing.raw, hide)?;
+    if raw != existing.raw {
+        replace_file_atomically(&target, raw.as_bytes())?;
+    }
+    Ok(())
+}
+
 pub(crate) fn replace_file_atomically(path: &Path, content: &[u8]) -> Result<(), String> {
     let permissions = match fs::metadata(path) {
         Ok(metadata) => {

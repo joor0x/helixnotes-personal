@@ -1,13 +1,26 @@
 <script lang="ts">
 	import { t as ui, label as uiLabel } from '$lib/i18n';
-	import { showCommandPalette, showSearch, theme, viewMode, activeNotebook, activeTag } from '$lib/stores/app';
+	import { showCommandPalette, showSearch, theme, viewMode, activeNotebook, activeTag, activeNotePath, viewerNote } from '$lib/stores/app';
+	import type { BulkTaskAction } from '$lib/api';
 	import { setTheme, reindex } from '$lib/api';
 	import { selectEditorMode } from '$lib/editor/mode';
 	import { darkThemes } from '$lib/platform';
 
 	// onNavigate runs the parent's view-change handler (refreshes the note list and reveals it
 	// if it was hidden), so opening a view here behaves exactly like clicking it in the sidebar.
-	let { onNavigate = () => {} }: { onNavigate?: () => void } = $props();
+	// noteTasks reaches the open note's editor for the note-wide task commands.
+	interface NoteTaskCommands {
+		run: (action: BulkTaskAction) => void;
+		setHidden: (hide: boolean) => void;
+		hidden: () => boolean;
+	}
+	let { onNavigate = () => {}, noteTasks = null }: { onNavigate?: () => void; noteTasks?: NoteTaskCommands | null } = $props();
+
+	const noteOpen = () => !!noteTasks && !!$activeNotePath && !$viewerNote && $viewMode !== 'trash';
+	function noteTaskAction(action: BulkTaskAction) {
+		$showCommandPalette = false;
+		noteTasks?.run(action);
+	}
 
 	function openView(mode: 'all' | 'quickaccess' | 'tasks' | 'daily' | 'trash') {
 		$viewMode = mode;
@@ -22,6 +35,8 @@
 		label: string;
 		shortcut?: string;
 		action: () => void;
+		/** Hidden from the list when this returns false. */
+		available?: () => boolean;
 	}
 
 	const modKey = navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl';
@@ -137,6 +152,22 @@
 		{ id: 'editor-rich', label: 'Rich text', action: () => { selectEditorMode('rich'); $showCommandPalette = false; } },
 		{ id: 'editor-live', label: 'Live preview', action: () => { selectEditorMode('live'); $showCommandPalette = false; } },
 		{ id: 'editor-source', label: 'Markdown source', action: () => { selectEditorMode('source'); $showCommandPalette = false; } },
+		{ id: 'note-tasks-check-all', label: 'Check All Tasks in Note', available: noteOpen, action: () => noteTaskAction('check_all') },
+		{ id: 'note-tasks-uncheck-all', label: 'Uncheck All Tasks in Note', available: noteOpen, action: () => noteTaskAction('uncheck_all') },
+		{ id: 'note-tasks-archive-completed', label: 'Archive Completed Tasks in Note', available: noteOpen, action: () => noteTaskAction('archive_completed') },
+		{ id: 'note-tasks-delete-completed', label: 'Delete Completed Tasks in Note', available: noteOpen, action: () => noteTaskAction('delete_completed') },
+		{
+			id: 'note-tasks-hide',
+			label: 'Hide Note Tasks from Tasks View',
+			available: () => noteOpen() && !noteTasks!.hidden(),
+			action: () => { $showCommandPalette = false; noteTasks?.setHidden(true); }
+		},
+		{
+			id: 'note-tasks-show',
+			label: 'Show Note Tasks in Tasks View',
+			available: () => noteOpen() && noteTasks!.hidden(),
+			action: () => { $showCommandPalette = false; noteTasks?.setHidden(false); }
+		},
 		{
 			id: 'reindex',
 			label: 'Rebuild Search Index',
@@ -147,11 +178,14 @@
 		}
 	];
 
-	let filteredCommands = $derived(
-		query.trim()
-			? commands.filter((c) => $uiLabel(c.label).toLocaleLowerCase().includes(query.toLocaleLowerCase()) || c.label.toLowerCase().includes(query.toLowerCase()))
-			: commands
-	);
+	let filteredCommands = $derived.by(() => {
+		// Read the stores here so availability follows the open note.
+		void $activeNotePath; void $viewerNote; void $viewMode; void $showCommandPalette;
+		const available = commands.filter((c) => !c.available || c.available());
+		return query.trim()
+			? available.filter((c) => $uiLabel(c.label).toLocaleLowerCase().includes(query.toLocaleLowerCase()) || c.label.toLowerCase().includes(query.toLowerCase()))
+			: available;
+	});
 
 	$effect(() => {
 		if ($showCommandPalette && inputEl) {

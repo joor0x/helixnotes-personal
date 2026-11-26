@@ -1316,5 +1316,18 @@
   "gitSync.pulled": "{count, plural, one {# bestand ontvangen} other {# bestanden ontvangen}}",
   "gitSync.untracked": "{count, plural, one {# bestand uit de repository verwijderd} other {# bestanden uit de repository verwijderd}}",
   "gitSync.pushed": "gepusht",
-  "gitSync.title": "Git"
+  "gitSync.title": "Git",
+  "tasks.hideFromTasksView": "Verbergen in Takenweergave",
+  "tasks.checkAll": "Alles afvinken",
+  "tasks.uncheckAll": "Alles uitvinken",
+  "tasks.archiveCompleted": "Voltooide archiveren",
+  "tasks.deleteCompleted": "Voltooide verwijderen",
+  "tasks.bulkChanged": "{count, plural, one {# taak bijgewerkt} other {# taken bijgewerkt}}",
+  "tasks.bulkNothing": "Geen taken om te wijzigen",
+  "ui.check_all_tasks_in_note": "Alle taken in notitie afvinken",
+  "ui.uncheck_all_tasks_in_note": "Alle taken in notitie uitvinken",
+  "ui.archive_completed_tasks_in_note": "Voltooide taken in notitie archiveren",
+  "ui.delete_completed_tasks_in_note": "Voltooide taken in notitie verwijderen",
+  "ui.hide_note_tasks_from_tasks_view": "Taken van notitie verbergen in Takenweergave",
+  "ui.show_note_tasks_in_tasks_view": "Taken van notitie tonen in Takenweergave"
 }
